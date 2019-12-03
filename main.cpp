@@ -10,12 +10,12 @@ int main(int argc, char **argv)
     std::string dataPath = svar.GetString("dataset", "");
     std::shared_ptr<System> system(new System(dataPath));
 
-//    std::thread thd_BackEnd(&System::ProcessBackEnd, &system);
-//    std::thread thd_PubImuData(&System::PubImuData, &system);
+//    std::thread thd_BackEnd(&System::ProcessBackEnd, system);
+    std::thread thd_PubImuData(&System::PubImuData, system);
     std::thread thd_PubImageData(&System::PubImageData, system);
-//    std::thread thd_Draw(&System::Draw, &system);
+//    std::thread thd_Draw(&System::Draw, system);
 
-//    thd_PubImuData.join();
+    thd_PubImuData.join();
     thd_PubImageData.join();
 
     std::cout << "main end... see you ..." << std::endl;

@@ -13,6 +13,7 @@
 #include <opencv2/opencv.hpp>
 #include <highgui.h>
 #include <eigen3/Eigen/Dense>
+#include <GSLAM/core/GSLAM.h>
 
 bool System::PubImuData()
 {
@@ -50,7 +51,7 @@ bool System::PubImuData()
         vAcc.y() = outputStr[5];
         vAcc.z() = outputStr[6];
 
-        // cout << "Imu t: " << fixed << dStampNSec << " gyr: " << vGyr.transpose() << " acc: " << vAcc.transpose() << endl;
+//        std::cout << "Imu t: " << dStampNSec << " gyr: " << vGyr.transpose() << " acc: " << vAcc.transpose() << std::endl;
         GetImuData(dStampNSec / 1e9, vGyr, vAcc);
         usleep(5000*_delay_times);
     }
@@ -107,11 +108,41 @@ bool System::PubImageData()
 
 void System::GetImuData(double stamp_sec, const Eigen::Vector3d &gyr, const Eigen::Vector3d &acc)
 {
-
-
 }
 
 void System::GetImageData(double stamp_sec, cv::Mat &img)
 {
+    if(!_init_feature) {
+        std::cout << "1 GetImageData first detected feature." << std::endl;
+        _init_feature = 1;
+        return;
+    }
+    if(_first_image_flag) {
+        std::cout << "2 GetImageData first image." << std::endl;
+        _first_image_flag = false;
+        _first_image_time = stamp_sec;
+        _last_image_time = stamp_sec;
+        return;
+    }
+    if(stamp_sec - _last_image_time > 1.0 || stamp_sec < _last_image_time){
+        std::cerr << "3 GetImageData discontinue! reset the feature tracker!" << std::endl;
+        _first_image_flag = true;
+        _last_image_time = 0;
+        _pub_count = 1;
+    }
 
+    _last_image_time = stamp_sec;
+
+    double MaxFREQ = svar.GetDouble("max_frequency", 10);
+    double MinFREQ = svar.GetDouble("min_frequency", 0.1);
+    // control the frequency
+    if(round(_pub_count / (stamp_sec - _first_image_time)) <= MaxFREQ){
+        _pub_this_frame = true;
+        // the frequency is too slow, reset the frequency
+        if(abs(_pub_count / (stamp_sec - _first_image_time) - MaxFREQ) < MinFREQ){
+            _first_image_time = stamp_sec;
+            _pub_count = 0;
+        }
+
+    }
 }
