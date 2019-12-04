@@ -35,9 +35,9 @@ class System
 {
 public:
     System(std::string data_path): _data_path(data_path){
+        ReadParameters();
         _pub_count = 0;
         _tracker_data.resize(svar.GetInt("number_of_camera", 1));
-        ReadParameters();
     }
 
     bool PubImageData();

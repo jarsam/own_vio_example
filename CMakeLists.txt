@@ -21,6 +21,7 @@ include_directories(.
         ${Boost_INCLUDE_DIRS}
         ${GLEW_INCLUDE_DIRS}
         ${GSLAM_INCLUDE_DIRS}
+        ${OpenCV_INCLUDE_DIRS}
 )
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
@@ -28,14 +29,17 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 
 add_library(MyVio
         System.cpp
+        PinholeCamera.cpp
+        FeatureTracker.cpp
 )
 
-target_link_libraries(MyVio ${OpenCV_LIBS}
+target_link_libraries(MyVio
+        ${OpenCV_LIBS}
         ${CERES_LIBRARIES}
         ${Pangolin_LIBRARIES}
         ${GLEW_LIBS}
         ${Boost_LIBRARIES}
-        ${EIGEN3_INCLUDE_DIR}
+        ${EIGEN3_LIBS}
         ${GSLAM_LIBS}
         )
 

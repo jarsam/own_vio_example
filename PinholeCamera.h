@@ -32,6 +32,9 @@ public:
     void LiftProjective(const Eigen::Vector2d& p, Eigen::Vector3d& P);
 
 private:
+    void Distortion(const Eigen::Vector2d &pre_pt, Eigen::Vector2d &norm_pt);
+
+private:
     double _focal_x;
     double _focal_y;
     double _cx;
