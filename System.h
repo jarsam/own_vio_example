@@ -7,6 +7,9 @@
 
 #include <opencv2/opencv.hpp>
 #include <Eigen/Dense>
+#include <GSLAM/core/GSLAM.h>
+
+#include "FeatureTracker.h"
 
 struct ImuMessage
 {
@@ -33,6 +36,8 @@ class System
 public:
     System(std::string data_path): _data_path(data_path){
         _pub_count = 0;
+        _tracker_data.resize(svar.GetInt("number_of_camera", 1));
+        ReadParameters();
     }
 
     bool PubImageData();
@@ -44,8 +49,7 @@ private:
     void GetImageData(double stamp_sec, cv::Mat &img);
     void GetImuData(double stamp_sec, const Eigen::Vector3d &gyr, const Eigen::Vector3d &acc);
 
-private:
-    bool _pub_this_frame;
+    void ReadParameters();
 
 private:
     std::string _data_path;
@@ -58,4 +62,6 @@ private:
     double _pub_count;
     double _first_image_time;
     double _last_image_time;
+
+    std::vector<FeatureTracker> _tracker_data;
 };
