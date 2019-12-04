@@ -29,6 +29,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 
 add_library(MyVio
         System.cpp
+        FeatureTracker.cpp
+        PinholeCamera.cpp
 )
 
 target_link_libraries(MyVio ${OpenCV_LIBS}

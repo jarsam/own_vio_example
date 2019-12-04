@@ -1,4 +1,5 @@
 #include "System.h"
+#include "Parameters.h"
 
 #include <unistd.h>
 #include <stdio.h>
@@ -14,6 +15,21 @@
 #include <highgui.h>
 #include <eigen3/Eigen/Dense>
 #include <GSLAM/core/GSLAM.h>
+
+void System::ReadParameters()
+{
+    cv::FileStorage camera_setting(_data_path + "/cam0/sensor.yaml", cv::FileStorage::READ);
+    cv::FileStorage imu_setting(_data_path + "/imu0/sensor.yaml", cv::FileStorage::READ);
+    if (!camera_setting.isOpened() && !imu_setting.isOpened()){
+        std::cerr << "1 ReadParameters Error: wrong path to setting!" << std::endl;
+        return;
+    }
+
+    camera_setting["intrinsics"] >> para._camera_intrinsics;
+    camera_setting["distortion_coefficients"] >> para._distortion_coefficients;
+    para._width = camera_setting["resolution"][0];
+    para._height = camera_setting["resolution"][1];
+}
 
 bool System::PubImuData()
 {
@@ -137,12 +153,17 @@ void System::GetImageData(double stamp_sec, cv::Mat &img)
     double MinFREQ = svar.GetDouble("min_frequency", 0.1);
     // control the frequency
     if(round(_pub_count / (stamp_sec - _first_image_time)) <= MaxFREQ){
-        _pub_this_frame = true;
+        para._pub_this_frame = true;
         // the frequency is too slow, reset the frequency
+        // FIXME: 感觉这里给有问题,不应该减去MaxFREQ
         if(abs(_pub_count / (stamp_sec - _first_image_time) - MaxFREQ) < MinFREQ){
             _first_image_time = stamp_sec;
             _pub_count = 0;
         }
-
     }
+    else{
+        para._pub_this_frame = false;
+    }
+
+    _tracker_data[0].ReadImage(img, stamp_sec);
 }
