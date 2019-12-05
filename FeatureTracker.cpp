@@ -49,6 +49,7 @@ bool FeatureTracker::ReadImage(const cv::Mat &image, double cur_time)
     for(auto &n: _track_cnt)
         n++;
     if (para._pub_this_frame){
-
+        RejectWithF();
     }
 }
+

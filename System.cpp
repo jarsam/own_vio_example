@@ -18,6 +18,8 @@
 
 void System::ReadParameters()
 {
+    LOG(ERROR) << _data_path + "/cam0/sensor.yaml" << std::endl;
+
     cv::FileStorage camera_setting(_data_path + "/cam0/sensor.yaml", cv::FileStorage::READ);
     cv::FileStorage imu_setting(_data_path + "/imu0/sensor.yaml", cv::FileStorage::READ);
     if (!camera_setting.isOpened() && !imu_setting.isOpened()){

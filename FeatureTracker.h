@@ -42,7 +42,13 @@ private:
         if (_forw_pts.size() >= 8){
             std::vector<cv::Point2d> un_cur_pts(_cur_pts.size()), un_forw_pts(_forw_pts.size());
             for(int i = 0; i < _cur_pts.size(); ++i){
-                Eigen::Vector3d tem_p;
+                Eigen::Vector3d tem_pt;
+                // 首先去畸变,然后用fundamental矩阵进行RANSAC.
+                _pinhole_camera.LiftProjective(Eigen::Vector2d(_cur_pts[i].x, _cur_pts[i].y), tem_pt);
+                tem_pt.x() = para._camera_intrinsics[0] * tem_pt.x() + para._camera_intrinsics[2] / 2.0;
+                tem_pt.y() = para._camera_intrinsics[1] * tem_pt.y() + para._camera_intrinsics[3] / 2.0;
+
+                LOG(INFO) << "tem_pt: " << tem_pt;
             }
         }
     }
