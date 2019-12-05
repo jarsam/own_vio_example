@@ -11,6 +11,7 @@
 #include <GSLAM/core/GSLAM.h>
 
 #include "FeatureTracker.h"
+#include "Estimator.h"
 
 struct ImuMessage
 {
@@ -36,7 +37,7 @@ typedef std::shared_ptr<ImageMessage> ImageMessagePtr;
 class System
 {
 public:
-    System(std::string data_path): _data_path(data_path), _start_backend(true), _pub_count(0){
+    System(std::string data_path): _data_path(data_path), _start_backend(true), _pub_count(0), _imu_current_time(-1){
         ReadParameters();
         _tracker_data.resize(svar.GetInt("number_of_camera", 1));
     }
@@ -50,7 +51,7 @@ private:
     void GetImageData(double stamp_sec, cv::Mat &img);
     void GetImuData(double stamp_sec, const Eigen::Vector3d &gyr, const Eigen::Vector3d &acc);
     void ReadParameters();
-    std::vector<std::pair<std::vector<ImuMessagePtr>, ImuMessagePtr>> GetMeasurements()
+    std::vector<std::pair<std::vector<ImuMessagePtr>, ImageMessagePtr>> GetMeasurements();
 
 private:
     std::string _data_path;
@@ -68,9 +69,12 @@ private:
     double _last_image_time;
 
     double _last_imu_time;
+    // imu中的时间
+    double _imu_current_time;
 
     //
     std::mutex _feature_buf_mutex;
+    std::mutex _estimator_mutex;
 
     std::queue<ImageMessagePtr> _feature_buf;
     std::queue<ImuMessagePtr> _imu_buf;
@@ -78,4 +82,6 @@ private:
     std::condition_variable _con;
 
     std::vector<FeatureTracker> _tracker_data;
+
+    Estimator _estimator;
 };

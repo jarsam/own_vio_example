@@ -11,6 +11,7 @@
 #include <vector>
 #include <set>
 #include <algorithm>
+#include <map>
 
 #include <cv.h>
 #include <opencv2/opencv.hpp>
@@ -244,9 +245,42 @@ void System::GetImageData(double stamp_sec, cv::Mat &img)
     }
 }
 
-std::vector<std::pair<std::vector<ImuMessagePtr>, ImuMessagePtr>> System::getMeasurements()
+std::vector<std::pair<std::vector<ImuMessagePtr>, ImageMessagePtr>> System::GetMeasurements()
 {
-    
+    std::vector<std::pair<std::vector<ImuMessagePtr>, ImageMessagePtr>> measurements;
+    while(true){
+        // 如果没有imu的数据和feature的数据都返回
+        if (_imu_buf.empty() || _feature_buf.empty()){
+            return measurements;
+        }
+        if (_imu_buf.back()->_header < _feature_buf.front()->_header + _estimator._td){
+            std::cerr << "wait for imu" << std::endl;
+            return measurements;
+        }
+        if (_imu_buf.front()->_header > _feature_buf.front()->_header + _estimator._td){
+            _feature_buf.pop();
+            continue;
+        }
+
+        ImageMessagePtr img_msg = _feature_buf.front();
+        _feature_buf.pop();
+
+        std::vector<ImuMessagePtr> imu_msg;
+        while(_imu_buf.front()->_header < img_msg->_header + _estimator._td){
+            imu_msg.emplace_back(_imu_buf.front());
+            _imu_buf.pop();
+        }
+        imu_msg.emplace_back(_imu_buf.front());
+        //FIXME:感觉要加下面这句话．
+        //_imu_buf.pop();
+        if(imu_msg.empty()){
+            std::cerr << "no imu between two frames" << std::endl;
+        }
+        // 感觉这个会传输很多信息．
+        measurements.emplace_back(imu_msg, img_msg);
+    }
+
+    return measurements;
 }
 
 void System::ProcessBackEnd()
@@ -256,7 +290,71 @@ void System::ProcessBackEnd()
         std::vector<std::pair<std::vector<ImuMessagePtr>, ImageMessagePtr> > measurements;
         std::unique_lock<std::mutex> lk(_feature_buf_mutex);
         _con.wait(lk, [&]{
-            return (measurements = )
-        })
+            return (measurements = GetMeasurements()).size() != 0;
+        });
+        if (measurements.size() > 0){
+            std::cout << "GetMeasurement size: " << measurements.size();
+        }
+        lk.unlock();
+        _estimator_mutex.lock();
+        for(auto &measurement: measurements){
+            auto img_msg = measurement.second;
+            double dx = 0, dy = 0, dz =0, rx = 0, ry = 0, rz = 0;
+            for(auto &imu_msg: measurement.first){
+                double t = imu_msg->_header;
+                double img_t = imu_msg->_header + _estimator._td;
+                if (t <= img_t){
+                    if (_imu_current_time < 0)
+                        _imu_current_time = t;
+                    double dt = t - _imu_current_time;
+                    _imu_current_time = t;
+                    dx = imu_msg->_linear_acceleration.x();
+                    dy = imu_msg->_linear_acceleration.y();
+                    dz = imu_msg->_linear_acceleration.z();
+                    rx = imu_msg->_angular_velocity.x();
+                    ry = imu_msg->_angular_velocity.y();
+                    rz = imu_msg->_angular_velocity.z();
+                    _estimator.ProcessIMU(dt, Eigen::Vector3d(dx, dy, dz), Eigen::Vector3d(rx, ry, rz));
+                }
+                else{
+                    double dt_1 = img_t - _imu_current_time;
+                    double dt_2 = t - img_t;
+                    _imu_current_time = img_t;
+                    // FIXME: 感觉w1和w2反了
+                    double w1 = dt_2 / (dt_2 + dt_1);
+                    double w2 = dt_1 / (dt_2 + dt_1);
+                    dx = w1 * dx + w2 * imu_msg->_linear_acceleration.x();
+                    dy = w1 * dy + w2 * imu_msg->_linear_acceleration.y();
+                    dz = w1 * dz + w2 * imu_msg->_linear_acceleration.z();
+                    rx = w1 * rx + w2 * imu_msg->_angular_velocity.x();
+                    ry = w1 * ry + w2 * imu_msg->_angular_velocity.y();
+                    rz = w1 * rz + w2 * imu_msg->_angular_velocity.z();
+                    // FIXME:感觉应该是dt_1+dt_2.
+                    _estimator.ProcessIMU(dt_1, Eigen::Vector3d(dx, dy, dz), Eigen::Vector3d(rx, ry, rz));
+                }
+            }
+            std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> image;
+            for(int i = 0; i < img_msg->_points.size(); ++i){
+                // 从1开始
+                int id = img_msg->_points_id[i] + 0.5;
+                int feature_id = id / svar.GetInt("number_of_camera", 1);
+                int camera_id = id % svar.GetInt("number_of_camera", 1);
+                double x = img_msg->_points[i].x();
+                double y = img_msg->_points[i].y();
+                double z = img_msg->_points[i].z();
+                double p_u = img_msg->_point_u[i];
+                double p_v = img_msg->_point_v[i];
+                double velocity_x = img_msg->_point_x_velocity[i];
+                double velocity_y = img_msg->_point_y_velocity[i];
+                Eigen::Matrix<double, 7, 1> xyz_uv_velocity;
+                xyz_uv_velocity << x, y, z, p_u, p_v, velocity_x, velocity_y;
+                image[feature_id].emplace_back(camera_id, xyz_uv_velocity);
+            }
+
+            _estimator.ProcessImage(image, img_msg->_header);
+            if(_estimator._solver_flag == Estimator::SolverFlag::NON_LINEAR){
+
+            }
+        }
     }
 }
