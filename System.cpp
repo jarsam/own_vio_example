@@ -9,6 +9,8 @@
 #include <thread>
 #include <iomanip>
 #include <vector>
+#include <set>
+#include <algorithm>
 
 #include <cv.h>
 #include <opencv2/opencv.hpp>
@@ -18,8 +20,6 @@
 
 void System::ReadParameters()
 {
-    LOG(ERROR) << _data_path + "/cam0/sensor.yaml" << std::endl;
-
     cv::FileStorage camera_setting(_data_path + "/cam0/sensor.yaml", cv::FileStorage::READ);
     cv::FileStorage imu_setting(_data_path + "/imu0/sensor.yaml", cv::FileStorage::READ);
     if (!camera_setting.isOpened() && !imu_setting.isOpened()){
@@ -79,7 +79,6 @@ bool System::PubImuData()
 bool System::PubImageData()
 {
     std::string sImage_file = _data_path + "/cam0/data.csv";
-
     std::cout << "1 PubImageData start sImage_file: " << sImage_file << std::endl;
 
     std::ifstream fsImage;
@@ -126,6 +125,22 @@ bool System::PubImageData()
 
 void System::GetImuData(double stamp_sec, const Eigen::Vector3d &gyr, const Eigen::Vector3d &acc)
 {
+    ImuMessagePtr imu_msg(new ImuMessage());
+    imu_msg->_header = stamp_sec;
+    imu_msg->_linear_acceleration = acc;
+    imu_msg->_angular_velocity = gyr;
+
+    if (stamp_sec <= _last_imu_time){
+        std::cerr << "imu message in disorder!" << std::endl;
+        return;
+    }
+    _last_imu_time = stamp_sec;
+
+    // FIXME: 感觉这里的Imu的锁应该和特征点的锁不一样.
+    _feature_buf_mutex.lock();
+    _imu_buf.push(imu_msg);
+    _feature_buf_mutex.unlock();
+    _con.notify_one();
 }
 
 void System::GetImageData(double stamp_sec, cv::Mat &img)
@@ -168,4 +183,80 @@ void System::GetImageData(double stamp_sec, cv::Mat &img)
     }
 
     _tracker_data[0].ReadImage(img, stamp_sec);
+    for(int i = 0; ; ++i){
+        bool completed = false;
+        //更新ID.
+        completed = _tracker_data[0].UpdataID(i);
+
+        if (!completed)
+            break;
+    }
+    if (para._pub_this_frame){
+        _pub_count++;
+        ImageMessagePtr feature_points(new ImageMessage());
+        feature_points->_header = stamp_sec;
+        std::vector<std::set<int> > hash_ids(svar.GetInt("number_of_camera", 1));
+        for(int i = 0; i < hash_ids.size(); ++i){
+            auto &un_pts = _tracker_data[i]._cur_un_pts;
+            auto &cur_pts = _tracker_data[i]._cur_pts;
+            auto &ids = _tracker_data[i]._ids;
+            auto &pts_velocity = _tracker_data[i]._pts_velocity;
+            for(int j = 0; j < ids.size(); j++){
+                // 跟踪数量大于1
+                if (_tracker_data[i]._track_cnt[j] > 1){
+                    int pt_id = ids[j];
+                    hash_ids[i].insert(pt_id);
+                    double x = un_pts[j].x;
+                    double y = un_pts[j].y;
+                    double z = 1;
+                    feature_points->_points.emplace_back(Eigen::Vector3d(x, y, z));
+                    feature_points->_points_id.emplace_back(pt_id * svar.GetInt("number_of_camera", 1) + i);
+                    feature_points->_point_u.emplace_back(cur_pts[j].x);
+                    feature_points->_point_v.emplace_back(cur_pts[j].y);
+                    feature_points->_point_x_velocity.emplace_back(pts_velocity[j].x);
+                    feature_points->_point_y_velocity.emplace_back(pts_velocity[j].y);
+                }
+            }
+            if (!_init_pub){
+                std::cout << "4 GetImageData skip the first image!" << std::endl;
+                _init_pub = true;
+            }
+            else{
+                _feature_buf_mutex.lock();
+                _feature_buf.push(feature_points);
+                _feature_buf_mutex.unlock();
+                _con.notify_one();
+            }
+        }
+    }
+
+    cv::Mat show_img;
+    cv::cvtColor(img, show_img, CV_GRAY2RGB);
+    if (svar.GetInt("show_track", 0)){
+        for (int i = 0; i < _tracker_data[0]._cur_pts.size(); ++i){
+            double len = std::min(1.0, 1.0 * _tracker_data[0]._track_cnt[i] / svar.GetInt("window_size", 10));
+            cv::circle(show_img, _tracker_data[0]._cur_pts[i], 2, cv::Scalar(255 * (1 - len), 0, 255 *len), 2);
+        }
+
+        cv::namedWindow("IMAGE", CV_WINDOW_AUTOSIZE);
+        cv::imshow("IMAGE", show_img);
+        cv::waitKey(1);
+    }
+}
+
+std::vector<std::pair<std::vector<ImuMessagePtr>, ImuMessagePtr>> System::getMeasurements()
+{
+    
+}
+
+void System::ProcessBackEnd()
+{
+    std::cout << "1 ProcessBackEnd start" << std::endl;
+    while (_start_backend){
+        std::vector<std::pair<std::vector<ImuMessagePtr>, ImageMessagePtr> > measurements;
+        std::unique_lock<std::mutex> lk(_feature_buf_mutex);
+        _con.wait(lk, [&]{
+            return (measurements = )
+        })
+    }
 }
