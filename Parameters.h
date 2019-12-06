@@ -24,6 +24,11 @@ public:
     std::vector<double > _camera_intrinsics;
     std::vector<double > _distortion_coefficients;
 
+    double _acc_noise;
+    double _acc_random;
+    double _gyr_noise;
+    double _gyr_random;
+
 public:
     bool _pub_this_frame;
 };

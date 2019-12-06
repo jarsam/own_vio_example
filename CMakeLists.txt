@@ -31,6 +31,8 @@ add_library(MyVio
         System.cpp
         PinholeCamera.cpp
         FeatureTracker.cpp
+        Estimator.cpp
+        FeatureManager.cpp
 )
 
 target_link_libraries(MyVio
