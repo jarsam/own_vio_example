@@ -246,7 +246,7 @@ void System::GetImageData(double stamp_sec, cv::Mat &img)
 
 std::vector<std::pair<std::vector<ImuMessagePtr>, ImuMessagePtr>> System::getMeasurements()
 {
-    
+
 }
 
 void System::ProcessBackEnd()
