@@ -15,11 +15,15 @@ void Estimator::ProcessIMU(double dt, const Eigen::Vector3d &linear_acceleration
     if(!_pre_integrations[_frame_count])
         _pre_integrations[_frame_count] = std::shared_ptr<IntegrationBase>(new IntegrationBase(_acc0, _gyr0, _Bas[_frame_count], _Bgs[_frame_count]));
     if(_frame_count != 0){
+        _pre_integrations[_frame_count]->PushBack(dt, linear_acceleration, angular_velocity);
 
     }
 }
 
 void Estimator::ProcessImage(const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double header)
 {
-
+    if (_feature_manager.AddFeatureCheckParallax(_frame_count, image, _td))
+        _marginalization_flag = MARGIN_OLD;
+    else
+        _marginalization_flag = MARGIN_SECOND_NEW;
 }

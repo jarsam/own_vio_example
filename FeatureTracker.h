@@ -9,6 +9,9 @@
 #include "PinholeCamera.h"
 
 #include <iostream>
+#include <map>
+#include <list>
+
 #include <Eigen/Dense>
 #include <GSLAM/core/GSLAM.h>
 #include <opencv2/opencv.hpp>
@@ -30,6 +33,8 @@ public:
         else
             return false;
     }
+    bool AddFeatureCheckParallax(int frame_count, const std::map<int, std::vector<int, Eigen::Matrix<double, 7, 1>>> &image,
+                                 double td);
 
 private:
     // 保证pt在图像中除了border的一圈内.

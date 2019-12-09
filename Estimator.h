@@ -22,6 +22,12 @@ public:
         NON_LINEAR
     };
 
+    enum MarginalizationFlag
+    {
+        MARGIN_OLD = 0,
+        MARGIN_SECOND_NEW = 1
+    };
+
     Estimator():_first_imu(false){
         _Ps.reserve(svar.GetInt("window_size", 10) + 1);
         _Vs.reserve(svar.GetInt("window_size", 10) + 1);
@@ -56,6 +62,7 @@ public:
     double _td;
 
     SolverFlag _solver_flag;
+    MarginalizationFlag _marginalization_flag;
 
 private:
     bool _first_imu;
@@ -75,6 +82,7 @@ private:
     std::vector<std::vector<Eigen::Vector3d> > _angular_velocity_buf;
 
     FeatureManager _feature_manager;
+    std::shared_ptr<IntegrationBase> _tmp_pre_integration;
 };
 
 
