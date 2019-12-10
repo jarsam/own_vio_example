@@ -13,6 +13,7 @@
 #include <iostream>
 #include <map>
 #include <list>
+#include <stdlib.h>
 
 class FeaturePerFrame
 {
@@ -59,10 +60,18 @@ public:
 class FeatureManager
 {
 public:
+    FeatureManager(){}
     FeatureManager(std::vector<Eigen::Matrix3d> &Rs);
     bool AddFeatureCheckParallax(int frame_count,
                                  const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image,
                                  double td);
+    void ClearState(){
+        _feature.clear();
+    }
+
+private:
+    double CompensatedParallax(const FeaturePerId &it_per_id, int frame_count);
+
 private:
     int _last_track_num;
 

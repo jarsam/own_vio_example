@@ -18,7 +18,7 @@ public:
                      const Eigen::Vector3d &linearized_ba, const Eigen::Vector3d &linearized_bg)
                      : _acc0(acc_0), _gyr0(gyr_0), _linearized_acc(linearized_ba), _linearized_gyr(gyr_0),
                        _linearized_ba(linearized_ba), _linearized_bg(linearized_bg),
-                       _jacobian(Eigen::Matrix<double, 15, 15>::Identity()), _convariance(Eigen::Matrix<double, 15, 15>),
+                       _jacobian(Eigen::Matrix<double, 15, 15>::Identity()), _covariance(Eigen::Matrix<double, 15, 15>::Zero()),
                        _sum_dt(0.0), _delta_p(Eigen::Vector3d::Zero()), _delta_q(Eigen::Quaterniond::Identity()),
                        _delta_v(Eigen::Vector3d::Zero())
 
@@ -155,8 +155,6 @@ private:
     std::vector<double> _dt_buf;
     std::vector<Eigen::Vector3d> _acc_buf;
     std::vector<Eigen::Vector3d> _gyr_buf;
-
-    FeatureManager _feature_manager;
 };
 
 #endif //VIO_EXAMPLE_INTEGRATIONBASE_H

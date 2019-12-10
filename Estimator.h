@@ -12,6 +12,8 @@
 #include <vector>
 
 #include "IntegrationBase.h"
+#include "InitialAlignment.h"
+#include "Utility.h"
 
 class Estimator
 {
@@ -28,7 +30,18 @@ public:
         MARGIN_SECOND_NEW = 1
     };
 
-    Estimator():_first_imu(false){
+    Estimator(){
+        ClearState();
+    }
+    void ProcessIMU(double dt, const Eigen::Vector3d &linear_acceleration, const Eigen::Vector3d &angular_velocity);
+    void ProcessImage(const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double header);
+
+private:
+    void ClearState(){
+        _first_imu = false;
+        _solver_flag = INITIAL;
+
+        _estimate_extrinsic = svar.GetInt("estimate_extrinsic", 2);
         _Ps.reserve(svar.GetInt("window_size", 10) + 1);
         _Vs.reserve(svar.GetInt("window_size", 10) + 1);
         _Rs.reserve(svar.GetInt("window_size", 10) + 1);
@@ -37,16 +50,8 @@ public:
         _dt_buf.reserve(svar.GetInt("window_size", 10) + 1);
         _linear_acceleration_buf.reserve(svar.GetInt("window_size", 10) + 1);
         _angular_velocity_buf.reserve(svar.GetInt("window_size", 10) + 1);
+        _headers.reserve(svar.GetInt("window_size", 10) + 1);
 
-        _feature_manager = FeatureManager(_Rs);
-
-        ClearState();
-    }
-    void ProcessIMU(double dt, const Eigen::Vector3d &linear_acceleration, const Eigen::Vector3d &angular_velocity);
-    void ProcessImage(const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double header);
-
-private:
-    void ClearState(){
         for(int i = 0; i < svar.GetInt("window_size", 10) + 1; ++i){
             _Rs[i].setIdentity();
             _Ps[i].setZero();
@@ -56,6 +61,9 @@ private:
 
             _frame_count = 0;
         }
+
+        _feature_manager.ClearState();
+        _feature_manager = FeatureManager(_Rs);
     }
 
 public:
@@ -66,8 +74,14 @@ public:
 
 private:
     bool _first_imu;
+    bool _estimate_extrinsic;
+    // 滑窗中的帧数
+    // 应该是_frame_count = 1的时候才是第一帧.
     double _frame_count;
 
+    std::vector<double> _headers;
+
+    Eigen::Vector3d _g;
     Eigen::Vector3d _acc0, _gyr0;
 
     std::vector<std::shared_ptr<IntegrationBase>> _pre_integrations;
@@ -83,6 +97,8 @@ private:
 
     FeatureManager _feature_manager;
     std::shared_ptr<IntegrationBase> _tmp_pre_integration;
+
+    std::map<double, ImageFrame> _all_image_frame;
 };
 
 

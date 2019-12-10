@@ -357,7 +357,6 @@ void System::ProcessBackEnd()
 
             _estimator.ProcessImage(image, img_msg->_header);
             if(_estimator._solver_flag == Estimator::SolverFlag::NON_LINEAR){
-
             }
         }
     }

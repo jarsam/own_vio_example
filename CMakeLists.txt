@@ -33,6 +33,7 @@ add_library(MyVio
         FeatureTracker.cpp
         Estimator.cpp
         FeatureManager.cpp
+        InitialAlignment.cpp
 )
 
 target_link_libraries(MyVio
