@@ -252,6 +252,7 @@ void System::GetImageData(double stamp_sec, cv::Mat &img)
 std::vector<std::pair<std::vector<ImuMessagePtr>, ImageMessagePtr>> System::GetMeasurements()
 {
     std::vector<std::pair<std::vector<ImuMessagePtr>, ImageMessagePtr>> measurements;
+    // 直到把_imu_buf或者_feature_buf中的数据全部取出,才会退出while循环.
     while(true){
         // 如果没有imu的数据和feature的数据都返回
         if (_imu_buf.empty() || _feature_buf.empty()){
@@ -270,13 +271,14 @@ std::vector<std::pair<std::vector<ImuMessagePtr>, ImageMessagePtr>> System::GetM
         _feature_buf.pop();
 
         std::vector<ImuMessagePtr> imu_msg;
+        // 一帧图像特征点数据,对应多帧Imu数据,把它们进行对应,然后塞入measurements
+        // 一帧图像特征点数据,与它和上一帧图像特征点数据之间的时间间隔内所有Imu数据,以及时间戳晚于当前帧图像的第一帧Imu数据.
         while(_imu_buf.front()->_header < img_msg->_header + _estimator._td){
             imu_msg.emplace_back(_imu_buf.front());
             _imu_buf.pop();
         }
-        imu_msg.emplace_back(_imu_buf.front());
-        //FIXME:感觉要加下面这句话．
-        //_imu_buf.pop();
+        // 时间戳晚于当前帧图像的第一帧Imu数据也是下一帧图像和当前帧之间Imu数据.
+        imu_msg.emplace_back(_imu_buf.front());// 时间戳晚于当前帧图像的第一帧Imu数据
         if(imu_msg.empty()){
             std::cerr << "no imu between two frames" << std::endl;
         }

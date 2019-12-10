@@ -34,6 +34,7 @@ add_library(MyVio
         Estimator.cpp
         FeatureManager.cpp
         InitialAlignment.cpp
+        InitialExRotation.cpp
 )
 
 target_link_libraries(MyVio

@@ -47,6 +47,9 @@ public:
     FeaturePerId(const int feature_id, const int start_frame): _feature_id(feature_id), _start_frame(start_frame),
                                                                _used_num(0), _estimated_depth(-1.0), _solve_flag(0)
     {}
+    int EndFrame(){
+        return _start_frame + _feature_per_frame.size() - 1;
+    }
 
     const int _feature_id;
     int _start_frame;
@@ -68,6 +71,7 @@ public:
     void ClearState(){
         _feature.clear();
     }
+    std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> GetCorresponding(int frame_count_l, int frame_count_r);
 
 private:
     double CompensatedParallax(const FeaturePerId &it_per_id, int frame_count);

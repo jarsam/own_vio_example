@@ -74,7 +74,7 @@ public:
 
 private:
     bool _first_imu;
-    bool _estimate_extrinsic;
+    int _estimate_extrinsic;
     // 滑窗中的帧数
     // 应该是_frame_count = 1的时候才是第一帧.
     double _frame_count;
@@ -96,6 +96,7 @@ private:
     std::vector<std::vector<Eigen::Vector3d> > _angular_velocity_buf;
 
     FeatureManager _feature_manager;
+    // 用于在创建ImageFrame对象时,把该指针赋给imageframe.pre_integration.
     std::shared_ptr<IntegrationBase> _tmp_pre_integration;
 
     std::map<double, ImageFrame> _all_image_frame;

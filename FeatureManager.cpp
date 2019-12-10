@@ -79,3 +79,20 @@ double FeatureManager::CompensatedParallax(const FeaturePerId &it_per_id, int fr
 
     return ans;
 }
+
+std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> FeatureManager::GetCorresponding(int frame_count_l,
+                                                                                          int frame_count_r)
+{
+    std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> corres;
+    for(auto &it: _feature){
+        if (it._start_frame <= frame_count_l && it.EndFrame() >= frame_count_r){
+            Eigen::Vector3d a = Eigen::Vector3d::Zero(), b = Eigen::Vector3d::Zero();
+            int idx_l = frame_count_l - it._start_frame;
+            int idx_r = frame_count_r - it._start_frame;
+            a = it._feature_per_frame[idx_l]._point;
+            b = it._feature_per_frame[idx_r]._point;
+            corres.emplace_back(std::make_pair(a, b));
+        }
+    }
+    return corres;
+}
