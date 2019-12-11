@@ -76,7 +76,7 @@ public:
 private:
     double CompensatedParallax(const FeaturePerId &it_per_id, int frame_count);
 
-private:
+public:
     int _last_track_num;
 
     std::list<FeaturePerId> _feature;

@@ -8,9 +8,11 @@
 #include <vector>
 
 #include "Parameters.h"
+#include "Utility.h"
 
 #include <opencv2/opencv.hpp>
 #include <Eigen/Dense>
+#include <GSLAM/core/GSLAM.h>
 
 class InitialExRotation
 {
@@ -27,9 +29,13 @@ private:
 
 private:
     int _frame_count;
+    // _Rc代表的是相机的旋转
     std::vector<Eigen::Matrix3d> _Rc;
+    // _Rimu代表的是Imu的旋转
     std::vector<Eigen::Matrix3d> _Rimu;
+    // 由_ric和Imu信息算出的两帧之间旋转.
     std::vector<Eigen::Matrix3d> _Rc_g;
+    // _ric 是计算出来的相机到Imu的旋转.
     Eigen::Matrix3d _ric;
 };
 

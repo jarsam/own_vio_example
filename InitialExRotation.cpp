@@ -22,6 +22,49 @@ bool InitialExRotation::CalibrationExRotation(std::vector<std::pair<Eigen::Vecto
     _Rc_g.emplace_back(_ric.inverse() * delta_q_imu * _ric);
 
     Eigen::MatrixXd A(_frame_count * 4, 4);
+    A.setZero();
+    for(int i = 1; i <= _frame_count; ++i){
+        Eigen::Quaterniond r1(_Rc[i]);
+        Eigen::Quaterniond r2(_Rc_g[i]);
+
+        // 求取估计出的相机和Imu之间旋转的残差.
+        double angular_distance = 180 / M_PI * r1.angularDistance(r2);
+        // 计算外点剔除的权重.
+        double huber = angular_distance > 5.0 ? 5.0 / angular_distance : 1.0;
+        Eigen::Matrix4d L, R;
+        // 通过相机对极关系得到的旋转q的左乘.
+        double w = Eigen::Quaterniond(_Rc[i]).w();
+        Eigen::Vector3d q = Eigen::Quaterniond(_Rc[i]).vec();
+        L.block<3, 3>(0, 0) = w * Eigen::Matrix3d::Identity() + Utility::SkewSymmetric(q);
+        L.block<3, 1>(0, 3) = q;
+        L.block<1, 3>(3, 0) = -q.transpose();
+        L(3, 3) = w;
+
+        // 由Imu预积分得到的旋转q的右乘
+        Eigen::Quaterniond R_ij(_Rimu[i]);
+        w = R_ij.w();
+        q = R_ij.vec();
+        R.block<3, 3>(0, 0) =  w * Eigen::Matrix3d::Identity() - Utility::SkewSymmetric(q);
+        R.block<3, 1>(0, 3) =  q;
+        R.block<1, 3>(3, 0) = -q.transpose();
+        R(3, 3) = w;
+
+        A.block<4, 4>((i - 1) * 4, 0) = huber * (L - R);
+    }
+
+    // 通过SVD分解,求取相机与Imu的相对旋转,解为系数矩阵A的右奇异向量V中最小奇异值对应的特征向量.
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    Eigen::Matrix<double, 4, 1> x = svd.matrixV().col(3);
+    Eigen::Quaterniond estimated_R(x);
+    _ric = estimated_R.toRotationMatrix().inverse();
+    Eigen::Vector3d ric_cov = svd.singularValues().tail<3>();
+    // 判断是否有充分的旋转,如果在某个轴上有退化运动(如匀速运动),则A的右零空间不为1,表现就是第二小的奇异值会大于某个阈值
+    if (_frame_count >= svar.GetInt("window_size", 10) && ric_cov(1) > 0.25){
+        calib_ric_result = _ric;
+        return true;
+    }
+    else
+        return false;
 }
 
 Eigen::Matrix3d InitialExRotation::SolveRelativeR(const std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> &corres)

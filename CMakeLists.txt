@@ -35,6 +35,8 @@ add_library(MyVio
         FeatureManager.cpp
         InitialAlignment.cpp
         InitialExRotation.cpp
+        InitialSfM.cpp
+        MotionEstimator.cpp
 )
 
 target_link_libraries(MyVio

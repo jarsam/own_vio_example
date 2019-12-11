@@ -50,6 +50,16 @@ public:
                             _linearized_ba, _linearized_bg,
                             result_delta_p, result_delta_q, result_delta_v,
                             result_linearized_ba, result_linearized_bg, 1);
+
+        _delta_p = result_delta_p;
+        _delta_q = result_delta_q;
+        _delta_v = result_delta_v;
+        _linearized_ba = result_linearized_ba;
+        _linearized_bg = result_linearized_bg;
+        _delta_q.normalize();
+        _sum_dt += _dt;
+        _acc0 = _acc1;
+        _gyr0 = _gyr1;
     }
 
     void MidPointIntegration(double dt, const Eigen::Vector3d &acc0, const Eigen::Vector3d gyr0,
@@ -131,7 +141,7 @@ public:
         }
     };
 
-private:
+public:
     // 当前传入的时间
     double _dt;
     double _sum_dt;
