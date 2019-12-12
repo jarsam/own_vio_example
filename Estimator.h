@@ -74,6 +74,7 @@ private:
 
     bool InitialStructure();
     bool RelativePose(Eigen::Matrix3d &relative_R, Eigen::Vector3d &relative_T, int &l);
+    bool VisualInitialAlign();
 
 public:
     double _td;

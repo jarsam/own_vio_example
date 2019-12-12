@@ -140,10 +140,87 @@ bool Estimator::InitialStructure()
     std::vector<Eigen::Quaterniond> Q(_frame_count + 1);
     std::vector<Eigen::Vector3d> T(_frame_count + 1);
     std::map<int, Eigen::Vector3d> sfm_tracked_points;
+    // 三角化和BA生成点云,相机到第l帧的位姿
     if (!sfm.Construct(_frame_count + 1, Q, T, l, relative_R, relative_T, sfm_feature, sfm_tracked_points)){
         _marginalization_flag = MARGIN_OLD;
         return false;
     }
+
+    // 初始化成功了进入下面的步骤
+    std::map<int, Eigen::Vector3d>::iterator it;
+    std::map<double, ImageFrame>::iterator frame_it = _all_image_frame.begin();
+    for(int i = 0; frame_it != _all_image_frame.end(); ++frame_it){
+        if(frame_it->first == _headers[i]){
+            frame_it->second._keyframe_flag = true;
+            // 现在是第l帧到Imu的旋转
+            frame_it->second._R = Q[i].toRotationMatrix() * _ric[0].transpose();
+            frame_it->second._T = T[i];
+            i++;
+            continue;
+        }
+        if (frame_it->first > _headers[i])
+            i++;
+
+        // 只有没在滑动窗口中的帧会进入这一步.
+        // 这都是之前初始化没成功的帧被margin了.
+        // 后面的步骤就根据初始化完成的帧通过pnp获取之前的帧的位姿和跟踪到的特征点.
+        // intial_r和initial_t 变成从第l帧到相机的位姿
+        Eigen::Matrix3d initial_r = (Q[i].inverse()).toRotationMatrix();
+        Eigen::Vector3d initial_t = -initial_r * T[i];
+        cv::Mat rvec, t, tmp_r;
+        cv::eigen2cv(initial_r, tmp_r);
+        cv::Rodrigues(tmp_r, rvec);
+        cv::eigen2cv(initial_t, t);
+        frame_it->second._keyframe_flag = false;
+
+        std::vector<cv::Point3f> pts_3_vector;
+        std::vector<cv::Point2f> pts_2_vector;
+        for(auto &id_pts: frame_it->second._points){
+            int feature_id = id_pts.first;
+            for(auto &i_p: id_pts.second){
+                it = sfm_tracked_points.find(feature_id);
+                if(it != sfm_tracked_points.end()){
+                    Eigen::Vector3d world_pts = it->second;
+                    cv::Point3f pts_3(world_pts(0), world_pts(1), world_pts(2));
+                    pts_3_vector.emplace_back(pts_3);
+
+                    Eigen::Vector2d img_pts = i_p.second.head<2>();
+                    cv::Point2f pts_2(img_pts(0), img_pts(1));
+                    pts_2_vector.emplace_back(pts_2);
+                }
+            }
+        }
+
+        // FIXME: 感觉之前的帧如果不能跟踪到就一直不能跟踪了啊..这不就直接GG了吗
+        if(pts_3_vector.size() < 6){
+            std::cout << "pts_3_vector size: " << pts_3_vector.size() << std::endl;
+            return false;
+        }
+        cv::Mat K = (cv::Mat_<double>(3, 3) << 1, 0, 0, 0, 1, 0, 0, 0, 1);
+        cv::Mat D;
+        if(!cv::solvePnP(pts_3_vector, pts_2_vector, K, D, rvec, t, true)){
+            return false;
+        }
+
+        Eigen::MatrixXd pnp_r;
+        Eigen::MatrixXd pnp_t;
+        cv::Mat r;
+        cv::Rodrigues(rvec, r);
+        Eigen::MatrixXd tmp_pnp_r;
+        cv::cv2eigen(r, tmp_pnp_r);
+        pnp_r = tmp_pnp_r.transpose();
+        cv::cv2eigen(t, pnp_t);
+        pnp_t = pnp_r * (-pnp_t);
+
+        // 变成Imu到世界坐标系的位姿了.
+        frame_it->second._R = pnp_r * _ric[0].transpose();
+        frame_it->second._T = pnp_t;
+    }
+
+    if(VisualInitialAlign())
+        return true;
+    else
+        return false;
 }
 
 // FIXME: 感觉这个初始方法怪怪的,有优化的空间.
@@ -172,3 +249,14 @@ bool Estimator::RelativePose(Eigen::Matrix3d &relative_R, Eigen::Vector3d &relat
     }
     return false;
 }
+
+bool Estimator::VisualInitialAlign()
+{
+    Eigen::VectorXd x;
+    bool result = VisualImuAlignment(_all_image_frame, _Bgs, _g, x);
+    if (!result){
+        LOG(ERROR) << "solve g failed!";
+        return false;
+    }
+}
+

@@ -21,15 +21,17 @@ public:
     ImageFrame(const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &points, double t)
         :_t(t), _points(points){}
 
+    // feature_id, feature组合, camera_id, feature信息
     std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> _points;
     double _t;
+    // Imu到第l帧的R
     Eigen::Matrix3d _R;
     Eigen::Vector3d _T;
     std::shared_ptr<IntegrationBase> _pre_integration;
     bool _keyframe_flag;
 };
 
-bool VisualImuAlignment(std::map<double, ImageFrame> &all_image_frame, Eigen::Vector3d &bgs, Eigen::Vector3d &g, Eigen::Vector3d &x);
+bool VisualImuAlignment(std::map<double, ImageFrame> &all_image_frame, std::vector<Eigen::Vector3d> &bgs, Eigen::Vector3d &g, Eigen::VectorXd &x);
 
 
 #endif //VIO_EXAMPLE_INITIALALIGNMENT_H
