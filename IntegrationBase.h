@@ -16,7 +16,7 @@ public:
     IntegrationBase() = delete;
     IntegrationBase(const Eigen::Vector3d &acc_0, const Eigen::Vector3d &gyr_0,
                      const Eigen::Vector3d &linearized_ba, const Eigen::Vector3d &linearized_bg)
-                     : _acc0(acc_0), _gyr0(gyr_0), _linearized_acc(linearized_ba), _linearized_gyr(gyr_0),
+                     : _acc0(acc_0), _gyr0(gyr_0), _linearized_acc(acc_0), _linearized_gyr(gyr_0),
                        _linearized_ba(linearized_ba), _linearized_bg(linearized_bg),
                        _jacobian(Eigen::Matrix<double, 15, 15>::Identity()), _covariance(Eigen::Matrix<double, 15, 15>::Zero()),
                        _sum_dt(0.0), _delta_p(Eigen::Vector3d::Zero()), _delta_q(Eigen::Quaterniond::Identity()),
@@ -60,6 +60,21 @@ public:
         _sum_dt += _dt;
         _acc0 = _acc1;
         _gyr0 = _gyr1;
+    }
+
+    void Repropagate(const Eigen::Vector3d& linearized_ba, const Eigen::Vector3d& linearized_bg){
+        _sum_dt = 0.0;
+        _acc0 = _linearized_acc;
+        _gyr0 = _linearized_gyr;
+        _delta_p.setZero();
+        _delta_q.setIdentity();
+        _delta_v.setZero();
+        _linearized_ba = linearized_ba;
+        _linearized_bg = linearized_bg;
+        _jacobian.setIdentity();
+        _covariance.setZero();
+        for(int i = 0;i < _dt_buf.size(); ++i)
+            Propagate(_dt_buf[i], _acc_buf[i], _gyr_buf[i]);
     }
 
     void MidPointIntegration(double dt, const Eigen::Vector3d &acc0, const Eigen::Vector3d gyr0,
@@ -150,8 +165,11 @@ public:
     Eigen::Vector3d _acc0, _gyr0;
     // 当前传入的Imu信息.
     Eigen::Vector3d _acc1, _gyr1;
+    // 存的第一帧的Imu信息, 在repropagete的时候使用
     Eigen::Vector3d _linearized_acc, _linearized_gyr;
     // 在最开始的时候,这些参数都是0, 是减去这些噪声.
+    // 然后每传入一帧都会预积分算出新的bias.
+    // 在初始化的时候, 陀螺仪的bias会进行标定, 会传入第一帧的_linearized_bg, 重新repropagate
     Eigen::Vector3d _linearized_ba, _linearized_bg;
     // 从最开始的变化量
     Eigen::Vector3d _delta_p, _delta_v;
