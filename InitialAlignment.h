@@ -24,8 +24,10 @@ public:
     // feature_id, feature组合, camera_id, feature信息
     std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> _points;
     double _t;
-    // Imu到第l帧的R
+    // Imu到第l帧相机的R
     Eigen::Matrix3d _R;
+    // 第l帧相机到当前帧相机的位移,只不过没有尺度信息
+    // 尺度是初始化的时候的第l帧到初始化帧的尺度
     Eigen::Vector3d _T;
     std::shared_ptr<IntegrationBase> _pre_integration;
     bool _keyframe_flag;

@@ -212,7 +212,7 @@ bool Estimator::InitialStructure()
         cv::cv2eigen(t, pnp_t);
         pnp_t = pnp_r * (-pnp_t);
 
-        // 变成Imu到世界坐标系的位姿了.
+        // 变成Imu到相机的位姿了.
         frame_it->second._R = pnp_r * _ric[0].transpose();
         frame_it->second._T = pnp_t;
     }

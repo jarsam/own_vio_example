@@ -30,6 +30,7 @@ void System::ReadParameters()
 
     camera_setting["intrinsics"] >> para._camera_intrinsics;
     camera_setting["distortion_coefficients"] >> para._distortion_coefficients;
+    camera_setting["extrinsicTranslation"] >> para._Tic;
     para._width = camera_setting["resolution"][0];
     para._height = camera_setting["resolution"][1];
     para._acc_noise = imu_setting["accelerometer_noise_density"];

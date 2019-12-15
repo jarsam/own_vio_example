@@ -29,6 +29,11 @@ public:
     double _gyr_noise;
     double _gyr_random;
 
+    // 相机和Imu之间的位移是读取参数获得的.
+    Eigen::Vector3d _Tic;
+    // 重力向量
+    Eigen::Vector3d _G = {0.0, 0.0, 9.8};
+
 public:
     bool _pub_this_frame;
 };

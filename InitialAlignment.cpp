@@ -41,18 +41,91 @@ void SolveGyroscopeBias(std::map<double, ImageFrame> &all_image_frame, std::vect
     }
 }
 
-// 初始化速度,重力向量g和尺度因子
+void RefineGravity(std::map<double, ImageFrame> &all_image_frame, Eigen::Vector3d &g, Eigen::VectorXd)
+{
+
+}
+
+// 初始化速度,重力向量g和尺度因子s
 bool LinearAlignment(std::map<double, ImageFrame> &all_image_frame, Eigen::Vector3d &g, Eigen::VectorXd &x)
 {
     int all_frame_count = all_image_frame.size();
-    int n_state = all_frame_count * 3 + 3 + 1; // 状态量的个数[V1, V2, ..., Vn, g, s]
+    // 状态量的个数[V1, V2, ..., Vn, g, s]
+    // V为速度, g为重力向量, s为尺度.
+    int n_state = all_frame_count * 3 + 3 + 1;
     Eigen::MatrixXd A{n_state, n_state};
     A.setZero();
     Eigen::VectorXd b{n_state};
+    b.setZero();
+    std::map<double, ImageFrame>::iterator frame_i;
+    std::map<double, ImageFrame>::iterator frame_j;
+    int i = 0;
+    for(frame_i = all_image_frame.begin(); std::next(frame_i) != all_image_frame.end(); ++frame_i, ++i){
+        frame_j = std::next(frame_i);
+        Eigen::MatrixXd tmp_A(6, 10);
+        tmp_A.setZero();
+        Eigen::VectorXd tmp_b(6);
+        tmp_b.setZero();
+
+        double dt = frame_j->second._pre_integration->_sum_dt;
+        // 使用第l帧坐标系下的坐标算出来的值和Imu预积分出来的值理论上是相等的
+        // 所以通过求最小二乘解就可得出相机坐标系下的值.
+        // 比如: 速度, 尺度和重力向量.
+        tmp_A.block<3, 3>(0, 0) = -dt * Eigen::Matrix3d::Identity();
+        tmp_A.block<3, 3>(0, 6) = frame_i->second._R.transpose() * dt * dt / 2 * Eigen::Matrix3d::Identity();
+        tmp_A.block<3, 1>(0, 9) = frame_i->second._R.transpose() * (frame_j->second._T - frame_i->second._T) / 100.0;
+        tmp_b.block<3, 1>(0, 0) = frame_j->second._pre_integration->_delta_p + frame_i->second._R.transpose() * frame_j->second._R * para._Tic - para._Tic;
+
+        tmp_A.block<3, 3>(3, 0) = -Eigen::Matrix3d::Identity();
+        tmp_A.block<3, 3>(3, 3) = frame_i->second._R.transpose() * frame_j->second._R;
+        tmp_A.block<3, 3>(3, 6) = frame_i->second._R.transpose() * dt * Eigen::Matrix3d::Identity();
+        tmp_A.block<3, 1>(3, 0) = frame_j->second._pre_integration->_delta_v;
+
+        // FIXME: 这里本来不应该为单位阵的,有改进的空间.
+        Eigen::Matrix<double, 6, 6> con_inv = Eigen::Matrix<double, 6, 6>::Identity();
+        // 原本为Hx=b,进行下一步为H^THx=H^Tb
+        Eigen::MatrixXd r_A = tmp_A.transpose() * con_inv * tmp_A;
+        Eigen::VectorXd r_b = tmp_A.transpose() * con_inv * tmp_b;
+
+        // A的上面为速度
+        A.block<6, 6>(i * 3, i * 3) += r_A.topLeftCorner<6, 6>();
+        b.segment<6>(i * 3) += r_b.head<6>();
+        // A的下面为重力向量和尺度
+        A.bottomRightCorner<4, 4>() += r_A.bottomRightCorner<4, 4>();
+        b.tail<4>() += r_b.tail<4>();
+        // 这个部分是速度和重力向量,尺度相乘的部分.
+        A.block<6, 4>(i * 3, n_state - 4) += r_A.topRightCorner<6, 4>();
+        A.block<4, 6>(n_state - 4, i * 3) += r_A.bottomLeftCorner<4, 6>();
+    }
+    A = A * 1000.0;
+    b = b * 1000.0;
+    x = A.ldlt().solve(b);
+    // FIXME: 为什么是除100, 不是应该除1000吗?
+    double s = x(n_state - 1) / 100.0;
+    g = x.segment<3>(n_state - 4);
+    if (fabs(g.norm() - para._G.norm()) > 1.0 || s < 0)
+        return false;
+    RefineGravity(all_image_frame, g, x);
+    // FIXME: 和上面的问题一样,这里不也是应该除1000吗?
+    s = (x.tail<1>())(0) / 100.0;
+    (x.tail<1>())(0) = s;
+    if (s < 0.0)
+        return false;
+    else
+        return true;
 }
 
+/*
+ * 通过之前初始化获得的相机和Imu的旋转和读取的相机和Imu的位移获得所有滑动窗口的位姿.
+ *
+ * 在纯视觉初始化的时候,采用第一帧C0时的相机坐标系作为参考坐标系,
+ * 通过纯视觉SfM可以获得所有滑动窗口中的位姿,
+ * 其中位移向量是没有绝对尺度信息的在C0坐标系的坐标,旋转向量为到C0的旋转四元数.
+ */
 bool VisualImuAlignment(std::map<double, ImageFrame> &all_image_frame, std::vector<Eigen::Vector3d> &bgs, Eigen::Vector3d &g, Eigen::VectorXd &x)
 {
+    // 使用两帧的相机到Imu的旋转来标定Imu的bias
     SolveGyroscopeBias(all_image_frame, bgs);
+    // 使用预积分量初始化速度,中立向量g和尺度因子s
     return LinearAlignment(all_image_frame, g, x);
 }
