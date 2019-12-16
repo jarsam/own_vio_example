@@ -287,6 +287,15 @@ bool Estimator::VisualInitialAlign()
     _ric[0] = para._Ric;
     _feature_manager.SetRic(_ric);
     // FIXME: 感觉这里的写法有问题.
-    _feature_manager.Triangulate(_Ps, TIC_TMP, para._Ric);
+    // 并且这里没把Tic传入进去
+    _feature_manager.Triangulate(_Ps, TIC_TMP, _ric);
+
+    double s = (x.tail<1>())(0);
+    // 优化了速度后需要重新传播.
+    for(int i = 0; i <= svar.GetInt("window_size", 20); ++i)
+        _pre_integrations[i]->Repropagate(Eigen::Vector3d::Zero(), _Bgs[i]);
+    // 这里好像是把第一帧作为坐标0点.
+    for(int i = _frame_count; i >= 0; --i)
+        _Ps[i] = s * _Ps[i] - _Rs[i] * para._Tic[0] - (s * _Ps[0] - _Rs[0] * para._Tic[0]);
 }
 

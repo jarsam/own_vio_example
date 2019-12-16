@@ -30,6 +30,7 @@ public:
     double _acc_random;
     double _gyr_noise;
     double _gyr_random;
+    double _init_depth = 5.0;
 
     // 相机和Imu之间的位移是读取参数获得的.
     Eigen::Vector3d _Tic = {-0.0216401454975, -0.064676986768, 0.00981073058949};

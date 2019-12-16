@@ -142,5 +142,51 @@ void FeatureManager::ClearDepth(const Eigen::VectorXd &x)
 void FeatureManager::Triangulate(std::vector<Eigen::Vector3d> &Ps, std::vector<Eigen::Vector3d> &tic,
                                  std::vector<Eigen::Matrix3d> &ric)
 {
+    for(auto& it_per_id: _feature){
+        // 每个id的特征点被多少帧图像观测到了.
+        it_per_id._used_num = it_per_id._feature_per_frame.size();
+        // 如果该特征点被两帧及两帧以上的图像观测到
+        // 且观测到该特征点的第一帧图像应该早于或等于滑动窗口第4最新关键帧.
+        // 也就是说至少是第4最新关键帧和第3最新关键帧观测到了该特征点(第2最新帧似乎是紧耦合优化的最新帧)
+        if(!(it_per_id._used_num >= 2 && it_per_id._start_frame < svar.GetInt("window_size", 20) - 2))
+            continue;
+        // 该id的特征点深度值大于0, 该值初始化的时候为-1, 如果大于0, 则说明该点被三角化过.
+        if(it_per_id._estimated_depth > 0)
+            continue;
 
+        // imu_i: 观测到该特征点的第一帧图像在滑动窗口中的帧号.
+        // imu_j: 观测到该特征点的最后一帧图像在滑动窗口中的帧号.
+        int imu_i = it_per_id._start_frame, imu_j = imu_i - 1;
+        Eigen::MatrixXd svd_A(2 * it_per_id._feature_per_frame.size(), 4);
+        int svd_idx = 0;
+        Eigen::Matrix<double, 3, 4> P0;
+        // FIXME: 这里的t0和R0似乎是Imu坐标系, 但是找不到_R被赋值的操作.
+        // 如果真的没有初始化,那么_R就是单位阵
+        // 由于后面三角化所需的是两两帧之间的位姿变化, 所以这个_R是否赋值没有影响
+        Eigen::Vector3d t0 = Ps[imu_i] + _R[imu_i] * tic[0];
+        Eigen::Matrix3d R0 = _R[imu_i] * ric[0];
+        P0.leftCols<3>() = Eigen::Matrix3d::Identity();
+        P0.rightCols<1>() = Eigen::Vector3d::Zero();
+
+        // 观测到该id特征点的每一图像帧
+        for(auto& it_per_frame: it_per_id._feature_per_frame){
+            imu_j++;// 观测到该特征点的最后一帧图像在滑动窗口中的帧号
+            Eigen::Vector3d t1 = Ps[imu_j] + _R[imu_j] * tic[0];
+            Eigen::Matrix3d R1 = _R[imu_j] * ric[0];
+            // t和R为两两帧之间的位姿变化
+            Eigen::Vector3d t = R0.transpose() * (t1 - t0);
+            Eigen::Matrix3d R = R0.transpose() * R1;
+            Eigen::Matrix<double, 3, 4> P;
+            P.leftCols<3>() = R.transpose();
+            P.rightCols<1>() = -R.transpose() * t;
+            Eigen::Vector3d f = it_per_frame._point.normalized();
+            svd_A.row(svd_idx++) = f[0] * P.row(2) - f[2] * P.row(0);
+            svd_A.row(svd_idx++) = f[1] * P.row(2) - f[2] * P.row(1);
+        }
+        Eigen::Vector4d svd_V = Eigen::JacobiSVD<Eigen::MatrixXd>(svd_A, Eigen::ComputeThinV).matrixV().rightCols<1>();
+        double svd_method = svd_V[2] / svd_V[3];
+        it_per_id._estimated_depth = svd_method;
+        if (it_per_id._estimated_depth < 0.1)
+            it_per_id._estimated_depth = para._init_depth;
+    }
 }

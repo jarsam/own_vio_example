@@ -56,6 +56,7 @@ public:
     std::vector<FeaturePerFrame> _feature_per_frame;
     int _used_num;
     bool _is_outlier;
+    // 初始化的时候为-1.
     double _estimated_depth;
     bool _solve_flag;// 0: haven't solve yet, 1: solve success, 2: solve fail
 };

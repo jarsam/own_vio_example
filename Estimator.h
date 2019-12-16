@@ -93,17 +93,17 @@ public:
     std::vector<double> _headers;
 
     Eigen::Vector3d _g;
-    Eigen::Vector3d _acc0, _gyr0;
+    Eigen::Vector3d _acc0, _gyr0;// 最近一次接收到的Imu数据
 
     std::vector<std::shared_ptr<IntegrationBase>> _pre_integrations;
 
-    std::vector<Eigen::Matrix3d> _ric;
-    std::vector<Eigen::Vector3d> _tic;
-    std::vector<Eigen::Vector3d> _Ps;
-    std::vector<Eigen::Vector3d> _Vs;
-    std::vector<Eigen::Matrix3d> _Rs;
-    std::vector<Eigen::Vector3d> _Bas;
-    std::vector<Eigen::Vector3d> _Bgs;
+    std::vector<Eigen::Matrix3d> _ric;// 从相机到Imu的旋转
+    std::vector<Eigen::Vector3d> _tic;// 从相机到Imu的平移
+    std::vector<Eigen::Vector3d> _Ps;// 滑动窗口中各帧在世界坐标系下的位置
+    std::vector<Eigen::Vector3d> _Vs;// 滑动窗口中各帧在世界坐标系下的速度
+    std::vector<Eigen::Matrix3d> _Rs;// 滑动窗口中各帧在世界坐标系下的旋转
+    std::vector<Eigen::Vector3d> _Bas;// 滑动窗口中各帧对应的加速度偏置
+    std::vector<Eigen::Vector3d> _Bgs;// 滑动窗口中各帧对应的陀螺仪偏置
     std::vector<std::vector<double> > _dt_buf;
     std::vector<std::vector<Eigen::Vector3d> > _linear_acceleration_buf;
     std::vector<std::vector<Eigen::Vector3d> > _angular_velocity_buf;
