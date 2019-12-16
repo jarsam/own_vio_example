@@ -72,6 +72,11 @@ public:
         _feature.clear();
     }
     std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> GetCorresponding(int frame_count_l, int frame_count_r);
+    Eigen::VectorXd GetDepthVector();
+    int GetFeatureCount();
+    void ClearDepth(const Eigen::VectorXd &x);
+    void SetRic(std::vector<Eigen::Matrix3d> &Ric);
+    void Triangulate(std::vector<Eigen::Vector3d>& Ps, std::vector<Eigen::Vector3d>& tic, std::vector<Eigen::Matrix3d>& ric);
 
 private:
     double CompensatedParallax(const FeaturePerId &it_per_id, int frame_count);

@@ -67,8 +67,8 @@ private:
                 tem_pt.y() = para._camera_intrinsics[1] * tem_pt.y() + para._camera_intrinsics[3];
                 un_cur_pts[i] = cv::Point2d(tem_pt.x(), tem_pt.y());
 
-                LOG(INFO) << "pre_pt: " << _cur_pts[i];
-                LOG(INFO) << "tem_pt: " << tem_pt;
+//                LOG(INFO) << "pre_pt: " << _cur_pts[i];
+//                LOG(INFO) << "tem_pt: " << tem_pt;
                 _pinhole_camera.LiftProjective(Eigen::Vector2d(_forw_pts[i].x, _forw_pts[i].y), tem_pt);
                 tem_pt.x() = para._camera_intrinsics[0] * tem_pt.x() + para._camera_intrinsics[2];
                 tem_pt.y() = para._camera_intrinsics[1] * tem_pt.y() + para._camera_intrinsics[3];

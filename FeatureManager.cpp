@@ -10,6 +10,12 @@ FeatureManager::FeatureManager(std::vector<Eigen::Matrix3d> &Rs): _R(Rs)
         _ric.emplace_back(Eigen::Matrix3d::Identity());
 }
 
+void FeatureManager::SetRic(std::vector<Eigen::Matrix3d> &Ric)
+{
+    for(int i = 0; i < svar.GetInt("number_of_camera", 1); ++i)
+        _ric[i] = Ric[i];
+}
+
 bool FeatureManager::AddFeatureCheckParallax(int frame_count,
                                              const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image,
                                              double td)
@@ -95,4 +101,46 @@ std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> FeatureManager::GetCorr
         }
     }
     return corres;
+}
+
+// 读取特征点的逆深度
+Eigen::VectorXd FeatureManager::GetDepthVector()
+{
+    Eigen::VectorXd dep_vec(GetFeatureCount());
+    int feature_index = -1;
+    for(auto &it_per_id: _feature){
+        it_per_id._used_num = it_per_id._feature_per_frame.size();
+        if (it_per_id._used_num >= 2 && it_per_id._start_frame < svar.GetInt("window_size", 20) - 2)
+            continue;
+        dep_vec(++feature_index) = 1. / it_per_id._estimated_depth;
+    }
+    return dep_vec;
+}
+
+int FeatureManager::GetFeatureCount()
+{
+    int cnt = 0;
+    for(auto &it: _feature){
+        it._used_num = it._feature_per_frame.size();
+        if (it._used_num >= 2 && it._start_frame < svar.GetInt("window_size", 20) - 2)
+            cnt++;
+    }
+    return cnt;
+}
+
+void FeatureManager::ClearDepth(const Eigen::VectorXd &x)
+{
+    int feature_index = -1;
+    for(auto &it_per_id: _feature){
+        it_per_id._used_num = it_per_id._feature_per_frame.size();
+        if( !(it_per_id._used_num >= 2 && it_per_id._start_frame < svar.GetInt("window_size", 20) - 2))
+            continue;
+        it_per_id._estimated_depth = 1.0 / x(++feature_index);
+    }
+}
+
+void FeatureManager::Triangulate(std::vector<Eigen::Vector3d> &Ps, std::vector<Eigen::Vector3d> &tic,
+                                 std::vector<Eigen::Matrix3d> &ric)
+{
+
 }

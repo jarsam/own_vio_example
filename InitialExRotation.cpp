@@ -59,7 +59,7 @@ bool InitialExRotation::CalibrationExRotation(std::vector<std::pair<Eigen::Vecto
     _ric = estimated_R.toRotationMatrix().inverse();
     Eigen::Vector3d ric_cov = svd.singularValues().tail<3>();
     // 判断是否有充分的旋转,如果在某个轴上有退化运动(如匀速运动),则A的右零空间不为1,表现就是第二小的奇异值会大于某个阈值
-    if (_frame_count >= svar.GetInt("window_size", 10) && ric_cov(1) > 0.25){
+    if (_frame_count >= svar.GetInt("window_size", 20) && ric_cov(1) > 0.25){
         calib_ric_result = _ric;
         return true;
     }

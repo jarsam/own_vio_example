@@ -62,6 +62,7 @@ void Estimator::ProcessImage(const std::map<int, std::vector<std::pair<int, Eige
             Eigen::Matrix3d calib_ric;
             if (_initial_ex_rotation.CalibrationExRotation(corres, _pre_integrations[_frame_count]->_delta_q, calib_ric)){
                 _ric[0] = calib_ric;
+                para._Ric = calib_ric;
                 _estimate_extrinsic = 1;
             }
         }
@@ -69,11 +70,14 @@ void Estimator::ProcessImage(const std::map<int, std::vector<std::pair<int, Eige
 
     if (_solver_flag == INITIAL){
         // 只有滑窗中的KeyFrame数量达到指定大小的时候才开始优化.
-        if (_frame_count == svar.GetInt("window_size", 10)){
+        if (_frame_count == svar.GetInt("window_size", 20)){
             bool result = false;
             if (_estimate_extrinsic != 2 && (header - _initial_timestamp) > 0.1){
                 result = InitialStructure();
                 _initial_timestamp = header;
+            }
+            if (result){
+
             }
         }
         else
@@ -123,7 +127,7 @@ bool Estimator::InitialStructure()
             imu_j++;
             Eigen::Vector3d pts_j = it_per_frame._point;
             // 这个_observation包含了所有观测到这个特征点的帧
-            tmp_feature._observation.emplace_back(std::make_pair(imu_j, Eigen::Vector3d(pts_j.x(), pts_j.y())));
+            tmp_feature._observation.emplace_back(std::make_pair(imu_j, Eigen::Vector2d(pts_j.x(), pts_j.y())));
         }
         sfm_feature.emplace_back(tmp_feature);
     }
@@ -227,7 +231,7 @@ bool Estimator::InitialStructure()
 // 在滑窗中寻找与最新的关键帧共视关系较强的关键帧
 bool Estimator::RelativePose(Eigen::Matrix3d &relative_R, Eigen::Vector3d &relative_T, int &l)
 {
-    for(int i = 0; i < svar.GetInt("window_size", 10); ++i){
+    for(int i = 0; i < svar.GetInt("window_size", 20); ++i){
         std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> corres = _feature_manager.GetCorresponding(i, svar.GetInt("window_size", 10));
         if(corres.size() > 20){
             // 求取匹配的特征点在图像上的视差和(归一化平面上)
@@ -253,10 +257,36 @@ bool Estimator::RelativePose(Eigen::Matrix3d &relative_R, Eigen::Vector3d &relat
 bool Estimator::VisualInitialAlign()
 {
     Eigen::VectorXd x;
+    // 要注意这个地方求解出的_g是在C0坐标系下的(也就是第l帧坐标系下).
     bool result = VisualImuAlignment(_all_image_frame, _Bgs, _g, x);
     if (!result){
         LOG(ERROR) << "solve g failed!";
         return false;
     }
+
+    // 要注意到之前Construct函数成功后将那个时候的滑动窗口中的帧的_keyframe_flag标为true
+    // 这里标记的帧可能和那个时候的帧不是一样的帧
+    // FIXME: 感觉有些不对.
+    for(int i = 0; i <= _frame_count; ++i){
+        Eigen::Matrix3d Ri = _all_image_frame[_headers[i]]._R;
+        Eigen::Vector3d Pi = _all_image_frame[_headers[i]]._T;
+        _Rs[i] = Ri;
+        _Ps[i] = Pi;
+        _all_image_frame[_headers[i]]._keyframe_flag = true;
+    }
+
+    // 这个时候的逆深度为1 / -1.0;
+    Eigen::VectorXd dep = _feature_manager.GetDepthVector();
+    for(int i = 0; i < dep.size(); ++i)
+        dep[i] = -1;
+    _feature_manager.ClearDepth(dep);
+
+    std::vector<Eigen::Vector3d> TIC_TMP(svar.GetInt("number_of_camera", 1));
+    for(int i = 0; i < TIC_TMP.size(); ++i)
+        TIC_TMP[i].setZero();
+    _ric[0] = para._Ric;
+    _feature_manager.SetRic(_ric);
+    // FIXME: 感觉这里的写法有问题.
+    _feature_manager.Triangulate(_Ps, TIC_TMP, para._Ric);
 }
 

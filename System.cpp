@@ -28,9 +28,11 @@ void System::ReadParameters()
         return;
     }
 
+    std::vector<double> Tic;
+
     camera_setting["intrinsics"] >> para._camera_intrinsics;
     camera_setting["distortion_coefficients"] >> para._distortion_coefficients;
-    camera_setting["extrinsicTranslation"] >> para._Tic;
+
     para._width = camera_setting["resolution"][0];
     para._height = camera_setting["resolution"][1];
     para._acc_noise = imu_setting["accelerometer_noise_density"];
@@ -240,7 +242,7 @@ void System::GetImageData(double stamp_sec, cv::Mat &img)
     cv::cvtColor(img, show_img, CV_GRAY2RGB);
     if (svar.GetInt("show_track", 0)){
         for (int i = 0; i < _tracker_data[0]._cur_pts.size(); ++i){
-            double len = std::min(1.0, 1.0 * _tracker_data[0]._track_cnt[i] / svar.GetInt("window_size", 10));
+            double len = std::min(1.0, 1.0 * _tracker_data[0]._track_cnt[i] / svar.GetInt("window_size", 20));
             cv::circle(show_img, _tracker_data[0]._cur_pts[i], 2, cv::Scalar(255 * (1 - len), 0, 255 *len), 2);
         }
 
@@ -363,4 +365,9 @@ void System::ProcessBackEnd()
             }
         }
     }
+}
+
+void System::Draw()
+{
+    usleep(5000);
 }

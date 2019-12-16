@@ -46,19 +46,20 @@ private:
         _initial_timestamp = 0;
 
         _estimate_extrinsic = svar.GetInt("estimate_extrinsic", 2);
-        _Ps.reserve(svar.GetInt("window_size", 10) + 1);
-        _Vs.reserve(svar.GetInt("window_size", 10) + 1);
-        _Rs.reserve(svar.GetInt("window_size", 10) + 1);
-        _Bas.reserve(svar.GetInt("window_size", 10) + 1);
-        _Bgs.reserve(svar.GetInt("window_size", 10) + 1);
-        _dt_buf.reserve(svar.GetInt("window_size", 10) + 1);
-        _linear_acceleration_buf.reserve(svar.GetInt("window_size", 10) + 1);
-        _angular_velocity_buf.reserve(svar.GetInt("window_size", 10) + 1);
-        _headers.reserve(svar.GetInt("window_size", 10) + 1);
+        _Ps.reserve(svar.GetInt("window_size", 20) + 1);
+        _Vs.reserve(svar.GetInt("window_size", 20) + 1);
+        _Rs.reserve(svar.GetInt("window_size", 20) + 1);
+        _Bas.reserve(svar.GetInt("window_size", 20) + 1);
+        _Bgs.reserve(svar.GetInt("window_size", 20) + 1);
+        _dt_buf.reserve(svar.GetInt("window_size", 20) + 1);
+        _linear_acceleration_buf.reserve(svar.GetInt("window_size", 20) + 1);
+        _angular_velocity_buf.reserve(svar.GetInt("window_size", 20) + 1);
+        _headers.reserve(svar.GetInt("window_size", 20) + 1);
+        _pre_integrations.reserve(svar.GetInt("window_size", 20) + 1);
         _ric.reserve(svar.GetInt("number_of_camera", 1));
         _tic.reserve(svar.GetInt("number_of_camera", 1));
 
-        for(int i = 0; i < svar.GetInt("window_size", 10) + 1; ++i){
+        for(int i = 0; i < svar.GetInt("window_size", 20) + 1; ++i){
             _Rs[i].setIdentity();
             _Ps[i].setZero();
             _Vs[i].setZero();

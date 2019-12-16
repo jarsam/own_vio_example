@@ -5,6 +5,8 @@
 #ifndef VIO_EXAMPLE_PARAMETERS_H
 #define VIO_EXAMPLE_PARAMETERS_H
 
+#include <Eigen/Dense>
+
 #include <vector>
 
 class GlobalParameters
@@ -30,7 +32,8 @@ public:
     double _gyr_random;
 
     // 相机和Imu之间的位移是读取参数获得的.
-    Eigen::Vector3d _Tic;
+    Eigen::Vector3d _Tic = {-0.0216401454975, -0.064676986768, 0.00981073058949};
+    Eigen::Matrix3d _Ric;
     // 重力向量
     Eigen::Vector3d _G = {0.0, 0.0, 9.8};
 
