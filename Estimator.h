@@ -46,18 +46,18 @@ private:
         _initial_timestamp = 0;
 
         _estimate_extrinsic = svar.GetInt("estimate_extrinsic", 2);
-        _Ps.reserve(svar.GetInt("window_size", 20) + 1);
-        _Vs.reserve(svar.GetInt("window_size", 20) + 1);
-        _Rs.reserve(svar.GetInt("window_size", 20) + 1);
-        _Bas.reserve(svar.GetInt("window_size", 20) + 1);
-        _Bgs.reserve(svar.GetInt("window_size", 20) + 1);
-        _dt_buf.reserve(svar.GetInt("window_size", 20) + 1);
-        _linear_acceleration_buf.reserve(svar.GetInt("window_size", 20) + 1);
-        _angular_velocity_buf.reserve(svar.GetInt("window_size", 20) + 1);
-        _headers.reserve(svar.GetInt("window_size", 20) + 1);
-        _pre_integrations.reserve(svar.GetInt("window_size", 20) + 1);
-        _ric.reserve(svar.GetInt("number_of_camera", 1));
-        _tic.reserve(svar.GetInt("number_of_camera", 1));
+        _Ps.resize(svar.GetInt("window_size", 20) + 1);
+        _Vs.resize(svar.GetInt("window_size", 20) + 1);
+        _Rs.resize(svar.GetInt("window_size", 20) + 1);
+        _Bas.resize(svar.GetInt("window_size", 20) + 1);
+        _Bgs.resize(svar.GetInt("window_size", 20) + 1);
+        _dt_buf.resize(svar.GetInt("window_size", 20) + 1);
+        _linear_acceleration_buf.resize(svar.GetInt("window_size", 20) + 1);
+        _angular_velocity_buf.resize(svar.GetInt("window_size", 20) + 1);
+        _headers.resize(svar.GetInt("window_size", 20) + 1);
+        _pre_integrations.resize(svar.GetInt("window_size", 20) + 1, nullptr);
+        _ric.resize(svar.GetInt("number_of_camera", 1));
+        _tic.resize(svar.GetInt("number_of_camera", 1));
 
         for(int i = 0; i < svar.GetInt("window_size", 20) + 1; ++i){
             _Rs[i].setIdentity();
@@ -76,24 +76,29 @@ private:
     bool InitialStructure();
     bool RelativePose(Eigen::Matrix3d &relative_R, Eigen::Vector3d &relative_T, int &l);
     bool VisualInitialAlign();
+    void SlideWindow();
+    void SlideWindowOld();
 
 public:
-    double _td;
-
     SolverFlag _solver_flag;
     MarginalizationFlag _marginalization_flag;
 
     bool _first_imu;
     int _estimate_extrinsic;
+    int _sum_of_back, _sum_of_front;
     // 滑窗中的帧数
     // 应该是_frame_count = 1的时候才是第一帧.
-    double _frame_count;
+    int _frame_count;
     double _initial_timestamp;
+    double _td;
 
     std::vector<double> _headers;
 
     Eigen::Vector3d _g;
     Eigen::Vector3d _acc0, _gyr0;// 最近一次接收到的Imu数据
+    // _backR0, _backP0是MARGIN的帧的位姿.
+    Eigen::Matrix3d _backR0, _lastR, _lastR0;
+    Eigen::Vector3d _backP0, _lastP, _lastP0;
 
     std::vector<std::shared_ptr<IntegrationBase>> _pre_integrations;
 

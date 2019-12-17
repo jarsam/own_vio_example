@@ -21,7 +21,7 @@
 
 void System::ReadParameters()
 {
-    cv::FileStorage camera_setting(_data_path + "/cam0/sensor.yaml", cv::FileStorage::READ);
+    cv::FileStorage camera_setting(_data_path + "/cam1/sensor.yaml", cv::FileStorage::READ);
     cv::FileStorage imu_setting(_data_path + "/imu0/sensor.yaml", cv::FileStorage::READ);
     if (!camera_setting.isOpened() && !imu_setting.isOpened()){
         std::cerr << "1 ReadParameters Error: wrong path to setting!" << std::endl;
@@ -86,7 +86,7 @@ bool System::PubImuData()
 
 bool System::PubImageData()
 {
-    std::string sImage_file = _data_path + "/cam0/data.csv";
+    std::string sImage_file = _data_path + "/cam1/data.csv";
     std::cout << "1 PubImageData start sImage_file: " << sImage_file << std::endl;
 
     std::ifstream fsImage;
@@ -115,7 +115,7 @@ bool System::PubImageData()
         dStampNSec = std::stod(outputStr[0]);
         sImgFileName = outputStr[1];
 
-        std::string imagePath = _data_path + "/cam0/data/" + sImgFileName;
+        std::string imagePath = _data_path + "/cam1/data/" + sImgFileName;
         imagePath.resize(imagePath.size() - 1);
         cv::Mat img = cv::imread(imagePath.c_str(), 0);
 
@@ -362,8 +362,10 @@ void System::ProcessBackEnd()
 
             _estimator.ProcessImage(image, img_msg->_header);
             if(_estimator._solver_flag == Estimator::SolverFlag::NON_LINEAR){
+
             }
         }
+        _estimator_mutex.unlock();
     }
 }
 

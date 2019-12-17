@@ -190,3 +190,45 @@ void FeatureManager::Triangulate(std::vector<Eigen::Vector3d> &Ps, std::vector<E
             it_per_id._estimated_depth = para._init_depth;
     }
 }
+
+void FeatureManager::RemoveBackShiftDepth(Eigen::Matrix3d &marg_R, Eigen::Vector3d &marg_P, Eigen::Matrix3d &new_R,
+                                          Eigen::Vector3d &new_P)
+{
+    for(auto it = _feature.begin(), it_next = _feature.begin(); it != _feature.end(); it = it_next){
+        it_next++;
+        if( it->_start_frame != 0 )
+            it->_start_frame--;
+        else{
+            Eigen::Vector3d uv_i = it->_feature_per_frame[0]._point;
+            it->_feature_per_frame.erase(it->_feature_per_frame.begin());
+            if (it->_feature_per_frame.size() < 2){
+                _feature.erase(it);
+                continue;
+            }
+            else{
+                Eigen::Vector3d pts_i = uv_i * it->_estimated_depth;
+                Eigen::Vector3d w_pts_i = marg_R * pts_i + marg_P;
+                Eigen::Vector3d pts_j = new_R.transpose() * (w_pts_i - new_P);
+                double dep_j = pts_j(2);
+                if (dep_j > 0)
+                    it->_estimated_depth = dep_j;
+                else
+                    it->_estimated_depth = para._init_depth;
+            }
+        }
+    }
+}
+
+void FeatureManager::RemoveBack()
+{
+    for(auto it = _feature.begin(), it_next = _feature.begin(); it != _feature.end(); it = it_next){
+        it_next++;
+        if(it->_start_frame != 0)
+            it->_start_frame--;
+        else{
+            it->_feature_per_frame.erase(it->_feature_per_frame.begin());
+            if(it->_feature_per_frame.size() == 0)
+                _feature.erase(it);
+        }
+    }
+}

@@ -42,9 +42,14 @@ void Estimator::ProcessIMU(double dt, const Eigen::Vector3d &linear_acceleration
 void Estimator::ProcessImage(const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double header)
 {
     if (_feature_manager.AddFeatureCheckParallax(_frame_count, image, _td))
+    {
+        LOG(INFO) << "Margin Old";
         _marginalization_flag = MARGIN_OLD;// KeyFrame
-    else
+    }
+    else{
+        LOG(INFO) << "Margin Second New";
         _marginalization_flag = MARGIN_SECOND_NEW; // Non-KeyFrame
+    }
 
     _headers[_frame_count] = header;
 
@@ -61,10 +66,13 @@ void Estimator::ProcessImage(const std::map<int, std::vector<std::pair<int, Eige
             std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> corres = _feature_manager.GetCorresponding(_frame_count - 1, _frame_count);
             Eigen::Matrix3d calib_ric;
             if (_initial_ex_rotation.CalibrationExRotation(corres, _pre_integrations[_frame_count]->_delta_q, calib_ric)){
+                LOG(INFO) << "Calibration Successed";
                 _ric[0] = calib_ric;
                 para._Ric = calib_ric;
                 _estimate_extrinsic = 1;
             }
+            else
+                LOG(INFO) << "Calibration Failed";
         }
     }
 
@@ -77,7 +85,12 @@ void Estimator::ProcessImage(const std::map<int, std::vector<std::pair<int, Eige
                 _initial_timestamp = header;
             }
             if (result){
-
+                LOG(INFO) << "Initial Construct Successed.";
+                _solver_flag = NON_LINEAR;
+            }
+            else {
+                LOG(INFO) << "Initial Construct Failed";
+                SlideWindow();
             }
         }
         else
@@ -136,6 +149,7 @@ bool Estimator::InitialStructure()
     Eigen::Vector3d relative_T;
     int l;
     if (!RelativePose(relative_R, relative_T, l)){
+        LOG(INFO) << "RelativePose Failed";
         return false;
     }
 
@@ -146,6 +160,7 @@ bool Estimator::InitialStructure()
     std::map<int, Eigen::Vector3d> sfm_tracked_points;
     // 三角化和BA生成点云,相机到第l帧的位姿
     if (!sfm.Construct(_frame_count + 1, Q, T, l, relative_R, relative_T, sfm_feature, sfm_tracked_points)){
+        LOG(INFO) << "sfm Construct Failed";
         _marginalization_flag = MARGIN_OLD;
         return false;
     }
@@ -203,6 +218,7 @@ bool Estimator::InitialStructure()
         cv::Mat K = (cv::Mat_<double>(3, 3) << 1, 0, 0, 0, 1, 0, 0, 0, 1);
         cv::Mat D;
         if(!cv::solvePnP(pts_3_vector, pts_2_vector, K, D, rvec, t, true)){
+            LOG(INFO) << "SolvePnP Failed";
             return false;
         }
 
@@ -224,7 +240,10 @@ bool Estimator::InitialStructure()
     if(VisualInitialAlign())
         return true;
     else
+    {
+        LOG(INFO) << "Visual Initial Align Failed";
         return false;
+    }
 }
 
 // FIXME: 感觉这个初始方法怪怪的,有优化的空间.
@@ -245,7 +264,7 @@ bool Estimator::RelativePose(Eigen::Matrix3d &relative_R, Eigen::Vector3d &relat
             // 求取平均视差
             double average_parallax = sum_parallax / corres.size();
             // 平均视差要大于一定阈值,并且能够有效地求解出变换矩阵.
-            if (average_parallax * 460 > 30 && _motion_estimator.SolveRelativeRT(corres, relative_R, relative_T)){
+            if (average_parallax * 460 > 0.1 && _motion_estimator.SolveRelativeRT(corres, relative_R, relative_T)){
                 l = i;
                 return true;
             }
@@ -296,6 +315,114 @@ bool Estimator::VisualInitialAlign()
         _pre_integrations[i]->Repropagate(Eigen::Vector3d::Zero(), _Bgs[i]);
     // 这里好像是把第一帧作为坐标0点.
     for(int i = _frame_count; i >= 0; --i)
-        _Ps[i] = s * _Ps[i] - _Rs[i] * para._Tic[0] - (s * _Ps[0] - _Rs[0] * para._Tic[0]);
+        _Ps[i] = s * _Ps[i] - _Rs[i] * para._Tic - (s * _Ps[0] - _Rs[0] * para._Tic);
+    int kv = -1;
+    std::map<double, ImageFrame>::iterator frame_i;
+    for(frame_i = _all_image_frame.begin(); frame_i != _all_image_frame.end(); ++frame_i){
+        if(frame_i->second._keyframe_flag){
+            kv++;
+            // 将原本的Imu坐标系的值转到世界坐标系下
+            // 将原本的Imu坐标系的值转到世界坐标系下
+            _Vs[kv] = frame_i->second._R * x.segment<3>(kv * 3);
+        }
+    }
+    for(auto &it_per_id: _feature_manager._feature){
+        it_per_id._used_num = it_per_id._feature_per_frame.size();
+        if(!(it_per_id._used_num >= 2 && it_per_id._start_frame < svar.GetInt("window_size", 20) - 2))
+            continue;
+        it_per_id._estimated_depth *= s;
+    }
+
+    // FIXME: 需要写完后继续看看, 这下面的代码的意思应该是将所有的值转到滑动窗口的第0帧的坐标系.
+    // 以第0帧为初始帧,重力指向第0帧的{0, 0, 1}
+    Eigen::Matrix3d R0 = Utility::G2R(_g);
+    double yaw = Utility::R2YPR(R0 * _Rs[0]).x();
+    R0 = Utility::YPR2R(Eigen::Vector3d{-yaw, 0, 0}) * R0;
+    _g = R0 * _g;
+    Eigen::Matrix3d rot_diff = R0;
+    for(int i = 0; i <= _frame_count; ++i){
+        _Ps[i] = rot_diff * _Ps[i];
+        _Rs[i] = rot_diff * _Rs[i];
+        _Vs[i] = rot_diff * _Vs[i];
+    }
+
+    return true;
 }
 
+void Estimator::SlideWindow()
+{
+    if (_marginalization_flag == MARGIN_OLD){
+        double t0 = _headers[0];
+        _backR0 = _Rs[0];
+        _backP0 = _Ps[0];
+        if (_frame_count == svar.GetInt("window_size", 20)){
+            for(int i = 0; i < svar.GetInt("window_size", 20); ++i){
+                std::swap(_pre_integrations[i], _pre_integrations[i + 1]);
+                _dt_buf[i].swap(_dt_buf[i + 1]);
+                _linear_acceleration_buf[i].swap(_linear_acceleration_buf[i + 1]);
+                _angular_velocity_buf[i].swap(_angular_velocity_buf[i + 1]);
+                _headers[i] = _headers[i + 1];
+                _Ps[i].swap(_Ps[i + 1]);
+                _Vs[i].swap(_Vs[i + 1]);
+                _Rs[i].swap(_Rs[i + 1]);
+                _Bas[i].swap(_Bas[i + 1]);
+                _Bgs[i].swap(_Bgs[i + 1]);
+            }
+            _headers[svar.GetInt("window_size", 20)] = _headers[svar.GetInt("window_size", 20) - 1];
+            _Ps[svar.GetInt("window_size", 20)] = _Ps[svar.GetInt("window_size", 20) - 1];
+            _Vs[svar.GetInt("window_size", 20)] = _Vs[svar.GetInt("window_size", 20) - 1];
+            _Rs[svar.GetInt("window_size", 20)] = _Rs[svar.GetInt("window_size", 20) - 1];
+            _Bas[svar.GetInt("window_size", 20)] = _Bas[svar.GetInt("window_size", 20) - 1];
+            _Bgs[svar.GetInt("window_size", 20)] = _Bgs[svar.GetInt("window_size", 20) - 1];
+
+            _pre_integrations[svar.GetInt("window_size", 20)] =
+                std::shared_ptr<IntegrationBase>(new IntegrationBase{_acc0, _gyr0,
+                                                                     _Bas[svar.GetInt("window_size", 20)],
+                                                                     _Bgs[svar.GetInt("window_size", 20)]});
+            _dt_buf[svar.GetInt("window_size", 20)].clear();
+            _linear_acceleration_buf[svar.GetInt("window_size", 20)].clear();
+            _angular_velocity_buf[svar.GetInt("window_size", 20)].clear();
+
+            // FIXME: 这个是什么操作?
+            if (true || _solver_flag == INITIAL){
+                std::map<double, ImageFrame>::iterator it0;
+                it0 = _all_image_frame.find(t0);
+                it0->second._pre_integration = nullptr;
+
+                // 将滑动窗口之前的帧去除了
+                for(std::map<double, ImageFrame>::iterator it = _all_image_frame.begin(); it != it0; ++it){
+                    it->second._pre_integration = nullptr;
+                }
+                _all_image_frame.erase(_all_image_frame.begin(), it0);
+                _all_image_frame.erase(t0);
+            }
+            SlideWindowOld();
+        }
+    }
+    else{
+        if(_frame_count == svar.GetInt("window_size", 20)){
+            for(unsigned int i = 0; i < _dt_buf[_frame_count].size(); ++i){
+
+            }
+        }
+    }
+}
+
+void Estimator::SlideWindowOld()
+{
+    _sum_of_back++;
+    // 只有初始化成功后SlideWindow才需要考虑特征点深度
+    bool shift_depth = _solver_flag == NON_LINEAR ? true : false;
+    // 将特征点去除.
+    if (shift_depth){
+        Eigen::Matrix3d R0, R1;
+        Eigen::Vector3d P0, P1;
+        R0 = _backR0 * _ric[0];
+        R1 = _Rs[0] * _ric[0];
+        P0 = _backP0 + _backR0 * _tic[0];
+        P1 = _Ps[0] + _Rs[0] * _tic[0];
+        _feature_manager.RemoveBackShiftDepth(R0, P0, R1, P1);
+    }
+    else
+        _feature_manager.RemoveBack();
+}

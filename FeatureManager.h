@@ -30,9 +30,10 @@ public:
     }
 
     double _cur_td;
+    // 归一化且去畸变的点
     Eigen::Vector3d _point;
-    Eigen::Vector3d _uv;
-    Eigen::Vector3d _velocity;
+    Eigen::Vector2d _uv;
+    Eigen::Vector2d _velocity;
     double _z;
     bool _is_used;
     double _parallax;
@@ -52,6 +53,7 @@ public:
     }
 
     const int _feature_id;
+    // _start_frame 代表的是在滑动窗口中的开始的帧
     int _start_frame;
     std::vector<FeaturePerFrame> _feature_per_frame;
     int _used_num;
@@ -78,6 +80,8 @@ public:
     void ClearDepth(const Eigen::VectorXd &x);
     void SetRic(std::vector<Eigen::Matrix3d> &Ric);
     void Triangulate(std::vector<Eigen::Vector3d>& Ps, std::vector<Eigen::Vector3d>& tic, std::vector<Eigen::Matrix3d>& ric);
+    void RemoveBackShiftDepth(Eigen::Matrix3d &marg_R, Eigen::Vector3d &marg_P, Eigen::Matrix3d &new_R, Eigen::Vector3d& new_P);
+    void RemoveBack();
 
 private:
     double CompensatedParallax(const FeaturePerId &it_per_id, int frame_count);
