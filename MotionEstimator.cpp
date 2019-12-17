@@ -195,7 +195,7 @@ int RecoverPose( cv::InputArray E, cv::InputArray _points1, cv::InputArray _poin
 }
 
 int RecoverPose( cv::InputArray E, cv::InputArray _points1, cv::InputArray _points2, cv::OutputArray _R,
-                 cv::OutputArray _t, double focal, cv::Point2d pp, cv::InputOutputArray _mask)
+                 cv::OutputArray _t, double focal, cv::Point2f pp, cv::InputOutputArray _mask)
 {
     cv::Mat cameraMatrix = (cv::Mat_<double>(3,3) << focal, 0, pp.x, 0, focal, pp.y, 0, 0, 1);
     return RecoverPose(E, _points1, _points2, cameraMatrix, _R, _t, _mask);

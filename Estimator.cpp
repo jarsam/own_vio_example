@@ -251,20 +251,23 @@ bool Estimator::InitialStructure()
 bool Estimator::RelativePose(Eigen::Matrix3d &relative_R, Eigen::Vector3d &relative_T, int &l)
 {
     for(int i = 0; i < svar.GetInt("window_size", 20); ++i){
-        std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> corres = _feature_manager.GetCorresponding(i, svar.GetInt("window_size", 10));
+        std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> corres = _feature_manager.GetCorresponding(i, svar.GetInt("window_size", 20));
         if(corres.size() > 20){
             // 求取匹配的特征点在图像上的视差和(归一化平面上)
             double sum_parallax = 0;
             for (int j = 0; j < int(corres.size()); j++) {
                 Eigen::Vector2d pts_0(corres[j].first(0), corres[j].first(1));
                 Eigen::Vector2d pts_1(corres[j].second(0), corres[j].second(1));
+                LOG(ERROR) << "pts0: " << pts_0;
+                LOG(ERROR) << "pts1: " << pts_1;
                 double parallax = (pts_0 - pts_1).norm();
                 sum_parallax = sum_parallax + parallax;
             }
             // 求取平均视差
             double average_parallax = sum_parallax / corres.size();
+            LOG(ERROR) << "average parallax: " << average_parallax;
             // 平均视差要大于一定阈值,并且能够有效地求解出变换矩阵.
-            if (average_parallax * 460 > 0.1 && _motion_estimator.SolveRelativeRT(corres, relative_R, relative_T)){
+            if (average_parallax * 460 > 30 && _motion_estimator.SolveRelativeRT(corres, relative_R, relative_T)){
                 l = i;
                 return true;
             }

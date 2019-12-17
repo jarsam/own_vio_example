@@ -38,7 +38,7 @@ bool FeatureTracker::ReadImage(const cv::Mat &image, double cur_time)
                 status[i] = 0;
         }
 
-//        ReduceVector(_prev_pts, status);
+        ReduceVector(_prev_pts, status);
         ReduceVector(_ids, status);
         ReduceVector(_cur_un_pts, status);
         ReduceVector(_track_cnt, status);

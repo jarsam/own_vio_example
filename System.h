@@ -37,7 +37,8 @@ typedef std::shared_ptr<ImageMessage> ImageMessagePtr;
 class System
 {
 public:
-    System(std::string data_path): _data_path(data_path), _start_backend(true), _pub_count(0), _imu_current_time(-1){
+    System(std::string data_path): _data_path(data_path), _start_backend(true), _pub_count(0), _imu_current_time(-1),
+                                   _last_imu_time(0){
         ReadParameters();
         _tracker_data.resize(svar.GetInt("number_of_camera", 1));
     }

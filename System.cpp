@@ -21,7 +21,7 @@
 
 void System::ReadParameters()
 {
-    cv::FileStorage camera_setting(_data_path + "/cam1/sensor.yaml", cv::FileStorage::READ);
+    cv::FileStorage camera_setting(_data_path + "/cam0/sensor.yaml", cv::FileStorage::READ);
     cv::FileStorage imu_setting(_data_path + "/imu0/sensor.yaml", cv::FileStorage::READ);
     if (!camera_setting.isOpened() && !imu_setting.isOpened()){
         std::cerr << "1 ReadParameters Error: wrong path to setting!" << std::endl;
@@ -86,7 +86,7 @@ bool System::PubImuData()
 
 bool System::PubImageData()
 {
-    std::string sImage_file = _data_path + "/cam1/data.csv";
+    std::string sImage_file = _data_path + "/cam0/data.csv";
     std::cout << "1 PubImageData start sImage_file: " << sImage_file << std::endl;
 
     std::ifstream fsImage;
@@ -115,7 +115,7 @@ bool System::PubImageData()
         dStampNSec = std::stod(outputStr[0]);
         sImgFileName = outputStr[1];
 
-        std::string imagePath = _data_path + "/cam1/data/" + sImgFileName;
+        std::string imagePath = _data_path + "/cam0/data/" + sImgFileName;
         imagePath.resize(imagePath.size() - 1);
         cv::Mat img = cv::imread(imagePath.c_str(), 0);
 
@@ -240,7 +240,7 @@ void System::GetImageData(double stamp_sec, cv::Mat &img)
 
     cv::Mat show_img;
     cv::cvtColor(img, show_img, CV_GRAY2RGB);
-    if (svar.GetInt("show_track", 0)){
+    if (svar.GetInt("show_track", 1)){
         for (int i = 0; i < _tracker_data[0]._cur_pts.size(); ++i){
             double len = std::min(1.0, 1.0 * _tracker_data[0]._track_cnt[i] / svar.GetInt("window_size", 20));
             cv::circle(show_img, _tracker_data[0]._cur_pts[i], 2, cv::Scalar(255 * (1 - len), 0, 255 *len), 2);
