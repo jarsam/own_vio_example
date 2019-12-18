@@ -6,13 +6,13 @@
 
 FeatureManager::FeatureManager(std::vector<Eigen::Matrix3d> &Rs): _R(Rs)
 {
-    for(int i = 0; i < svar.GetInt("number_of_camera", 1); ++i)
+    for(int i = 0; i < svar.GetInt("camera_number", 1); ++i)
         _ric.emplace_back(Eigen::Matrix3d::Identity());
 }
 
 void FeatureManager::SetRic(std::vector<Eigen::Matrix3d> &Ric)
 {
-    for(int i = 0; i < svar.GetInt("number_of_camera", 1); ++i)
+    for(int i = 0; i < svar.GetInt("camera_number", 1); ++i)
         _ric[i] = Ric[i];
 }
 
@@ -228,6 +228,23 @@ void FeatureManager::RemoveBack()
         else{
             it->_feature_per_frame.erase(it->_feature_per_frame.begin());
             if(it->_feature_per_frame.size() == 0)
+                _feature.erase(it);
+        }
+    }
+}
+
+void FeatureManager::RemoveFront(int frame_count)
+{
+    for(auto it = _feature.begin(), it_next = _feature.begin(); it != _feature.end(); it = it_next){
+        it_next++;
+        if (it->_start_frame == frame_count)
+            it->_start_frame--;
+        else{
+            int j = svar.GetInt("window_size", 20) - 1 - it->_start_frame;
+            if (it->EndFrame() < frame_count - 1)
+                continue;
+            it->_feature_per_frame.erase(it->_feature_per_frame.begin() + j);
+            if (it->_feature_per_frame.size() == 0)
                 _feature.erase(it);
         }
     }

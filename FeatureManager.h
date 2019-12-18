@@ -82,6 +82,7 @@ public:
     void Triangulate(std::vector<Eigen::Vector3d>& Ps, std::vector<Eigen::Vector3d>& tic, std::vector<Eigen::Matrix3d>& ric);
     void RemoveBackShiftDepth(Eigen::Matrix3d &marg_R, Eigen::Vector3d &marg_P, Eigen::Matrix3d &new_R, Eigen::Vector3d& new_P);
     void RemoveBack();
+    void RemoveFront(int frame_count);
 
 private:
     double CompensatedParallax(const FeaturePerId &it_per_id, int frame_count);

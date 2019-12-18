@@ -203,7 +203,7 @@ void System::GetImageData(double stamp_sec, cv::Mat &img)
         _pub_count++;
         ImageMessagePtr feature_points(new ImageMessage());
         feature_points->_header = stamp_sec;
-        std::vector<std::set<int> > hash_ids(svar.GetInt("number_of_camera", 1));
+        std::vector<std::set<int> > hash_ids(svar.GetInt("camera_number", 1));
         for(int i = 0; i < hash_ids.size(); ++i){
             auto &un_pts = _tracker_data[i]._cur_un_pts;
             auto &cur_pts = _tracker_data[i]._cur_pts;
@@ -218,7 +218,7 @@ void System::GetImageData(double stamp_sec, cv::Mat &img)
                     double y = un_pts[j].y;
                     double z = 1;
                     feature_points->_points.emplace_back(Eigen::Vector3d(x, y, z));
-                    feature_points->_points_id.emplace_back(pt_id * svar.GetInt("number_of_camera", 1) + i);
+                    feature_points->_points_id.emplace_back(pt_id * svar.GetInt("camera_number", 1) + i);
                     feature_points->_point_u.emplace_back(cur_pts[j].x);
                     feature_points->_point_v.emplace_back(cur_pts[j].y);
                     feature_points->_point_x_velocity.emplace_back(pts_velocity[j].x);
@@ -346,8 +346,8 @@ void System::ProcessBackEnd()
             for(int i = 0; i < img_msg->_points.size(); ++i){
                 // 从1开始
                 int id = img_msg->_points_id[i] + 0.5;
-                int feature_id = id / svar.GetInt("number_of_camera", 1);
-                int camera_id = id % svar.GetInt("number_of_camera", 1);
+                int feature_id = id / svar.GetInt("camera_number", 1);
+                int camera_id = id % svar.GetInt("camera_number", 1);
                 double x = img_msg->_points[i].x();
                 double y = img_msg->_points[i].y();
                 double z = img_msg->_points[i].z();

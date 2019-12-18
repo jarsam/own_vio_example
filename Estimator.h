@@ -17,6 +17,8 @@
 #include "InitialExRotation.h"
 #include "InitialSfM.h"
 #include "MotionEstimator.h"
+#include "MarginalizaitonFactor.h"
+#include "ImuFactor.h"
 
 class Estimator
 {
@@ -56,8 +58,16 @@ private:
         _angular_velocity_buf.resize(svar.GetInt("window_size", 20) + 1);
         _headers.resize(svar.GetInt("window_size", 20) + 1);
         _pre_integrations.resize(svar.GetInt("window_size", 20) + 1, nullptr);
-        _ric.resize(svar.GetInt("number_of_camera", 1));
-        _tic.resize(svar.GetInt("number_of_camera", 1));
+        _ric.resize(svar.GetInt("camera_number", 1));
+        _tic.resize(svar.GetInt("camera_number", 1));
+
+        _para_pose.resize(svar.GetInt("window_size", 20) + 1, std::vector<double>(POSE_SIZE, 0));
+        _para_speed_bias.resize(svar.GetInt("window_size", 20) + 1, std::vector<double>(SPEED_BIAS, 0));
+        _para_feature.resize(svar.GetInt("feature_number", 1000), std::vector<double>(FEATURE_SIZE, 0));
+        _para_ex_pose.resize(svar.GetInt("camera_number", 1), std::vector<double>(POSE_SIZE, 0));
+        _para_retrive_pose.resize(POSE_SIZE, 0.0);
+        _para_td.resize(1, std::vector<double>(1, 0));
+        _para_tr.resize(1, std::vector<double>(1, 0));
 
         for(int i = 0; i < svar.GetInt("window_size", 20) + 1; ++i){
             _Rs[i].setIdentity();
@@ -78,6 +88,10 @@ private:
     bool VisualInitialAlign();
     void SlideWindow();
     void SlideWindowOld();
+    void SlideWindowNew();
+    void SolveOdometry();
+    void BackendOptimization();
+    void Vector2Double();
 
 public:
     SolverFlag _solver_flag;
@@ -85,12 +99,19 @@ public:
 
     bool _first_imu;
     int _estimate_extrinsic;
-    int _sum_of_back, _sum_of_front;
+    int _sum_of_back, _sum_of_front;// Margin_Old和Margin_New的次数
     // 滑窗中的帧数
     // 应该是_frame_count = 1的时候才是第一帧.
     int _frame_count;
-    double _initial_timestamp;
-    double _td;
+    double _initial_timestamp, _td;
+
+    std::vector<std::vector<double> > _para_pose;
+    std::vector<std::vector<double> > _para_speed_bias;
+    std::vector<std::vector<double> > _para_feature;
+    std::vector<std::vector<double> > _para_ex_pose;
+    std::vector<double> _para_retrive_pose;
+    std::vector<std::vector<double> > _para_td;
+    std::vector<std::vector<double> > _para_tr;
 
     std::vector<double> _headers;
 
@@ -110,14 +131,16 @@ public:
     std::vector<Eigen::Vector3d> _Bas;// 滑动窗口中各帧对应的加速度偏置
     std::vector<Eigen::Vector3d> _Bgs;// 滑动窗口中各帧对应的陀螺仪偏置
     std::vector<std::vector<double> > _dt_buf;
-    std::vector<std::vector<Eigen::Vector3d> > _linear_acceleration_buf;
-    std::vector<std::vector<Eigen::Vector3d> > _angular_velocity_buf;
+    std::vector<std::vector<Eigen::Vector3d> > _linear_acceleration_buf;// 滑动窗口中的传入的Imu加速度
+    std::vector<std::vector<Eigen::Vector3d> > _angular_velocity_buf;// 滑动窗口中的传入的Imu角速度
 
+    MotionEstimator _motion_estimator;
     FeatureManager _feature_manager;
     InitialExRotation _initial_ex_rotation;
     // 用于在创建ImageFrame对象时,把该指针赋给imageframe.pre_integration.
     std::shared_ptr<IntegrationBase> _tmp_pre_integration;
-    MotionEstimator _motion_estimator;
+    // 上一次边缘化的信息.
+    std::shared_ptr<MarginalizationInfo> _last_marginalization_info;
 
     std::map<double, ImageFrame> _all_image_frame;
 };

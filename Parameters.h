@@ -42,6 +42,13 @@ public:
     bool _pub_this_frame;
 };
 
+enum ParameterSize
+{
+    POSE_SIZE = 7,
+    SPEED_BIAS = 9,
+    FEATURE_SIZE = 1
+};
+
 enum StateOrder
 {
     O_P = 0,

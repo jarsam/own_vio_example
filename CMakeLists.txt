@@ -38,6 +38,7 @@ add_library(MyVio
         InitialExRotation.cpp
         InitialSfM.cpp
         MotionEstimator.cpp
+        MarginalizaitonFactor.cpp
 )
 
 target_link_libraries(MyVio

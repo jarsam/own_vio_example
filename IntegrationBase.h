@@ -9,6 +9,7 @@
 
 #include "Parameters.h"
 #include "FeatureManager.h"
+#include "Utility.h"
 
 class IntegrationBase
 {
@@ -155,6 +156,40 @@ public:
             _covariance = F * _covariance * F.transpose() + V * _noise * V.transpose();
         }
     };
+
+    // Pi, Qi, Vi, Bai, Bgi: 前一次预积分结果
+    // Pj, Qj, Vj, Baj, Bgj: 后一次预积分结果
+    // 这个函数是求Residual的
+    Eigen::Matrix<double, 15, 1> Evaluate(
+        const Eigen::Vector3d &Pi, const Eigen::Quaterniond &Qi, const Eigen::Vector3d &Vi, const Eigen::Vector3d &Bai, const Eigen::Vector3d &Bgi,
+        const Eigen::Vector3d &Pj, const Eigen::Quaterniond &Qj, const Eigen::Vector3d &Vj, const Eigen::Vector3d &Baj, const Eigen::Vector3d &Bgj
+        )
+    {
+        Eigen::Matrix<double, 15, 1> residuals;
+        Eigen::Matrix3d dp_dba = _jacobian.block<3, 3>(O_P, O_BA);
+        Eigen::Matrix3d dp_dbg = _jacobian.block<3, 3>(O_P, O_BG);
+        Eigen::Matrix3d dq_dbg = _jacobian.block<3, 3>(O_R, O_BG);
+        Eigen::Matrix3d dv_dba = _jacobian.block<3, 3>(O_V, O_BA);
+        Eigen::Matrix3d dv_dbg = _jacobian.block<3, 3>(O_V, O_BG);
+
+        Eigen::Vector3d dba = Bai - _linearized_ba;
+        Eigen::Vector3d dbg = Bgi - _linearized_bg;
+
+        // IMU预积分的结果,消除掉acc bias和gyro bias的影响, 对应IMU model中的\hat{\alpha},\hat{\beta},\hat{\gamma}
+        Eigen::Quaterniond corrected_delta_q = _delta_q * Utility::DeltaQ(dq_dbg * dbg);
+        Eigen::Vector3d    corrected_delta_v = _delta_v + dv_dba * dba + dv_dbg * dbg;
+        Eigen::Vector3d    corrected_delta_p = _delta_p + dp_dba * dba + dp_dbg * dbg;
+
+        // FIXME: 这里用了原本的G, 没用优化后的重力向量?
+        // IMU项residual计算,输入参数是状态的估计值, 上面correct_delta_*是预积分值, 二者求'diff'得到residual
+        residuals.block<3, 1>(O_P, 0)  = Qi.inverse() * (0.5 * para._G * _sum_dt * _sum_dt + Pj - Pi - Vi * _sum_dt) - corrected_delta_p;
+        residuals.block<3, 1>(O_R, 0)  = 2 * (corrected_delta_q.inverse() * (Qi.inverse() * Qj)).vec();
+        residuals.block<3, 1>(O_V, 0)  = Qi.inverse() * (para._G * _sum_dt + Vj - Vi) - corrected_delta_v;
+        residuals.block<3, 1>(O_BA, 0) = Baj - Bai;
+        residuals.block<3, 1>(O_BG, 0) = Bgj - Bgi;
+
+        return residuals;
+    }
 
 public:
     // 当前传入的时间

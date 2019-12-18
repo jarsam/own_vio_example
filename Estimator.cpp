@@ -2,6 +2,7 @@
 // Created by liu on 19-12-5.
 //
 
+#include "PoseLocalParameterization.h"
 #include "Estimator.h"
 
 void Estimator::ProcessIMU(double dt, const Eigen::Vector3d &linear_acceleration,
@@ -63,7 +64,8 @@ void Estimator::ProcessImage(const std::map<int, std::vector<std::pair<int, Eige
     // 相机和IMU之间的相对旋转
     if (_estimate_extrinsic == 2){
         if (_frame_count != 0){
-            std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> corres = _feature_manager.GetCorresponding(_frame_count - 1, _frame_count);
+            std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> corres =
+                _feature_manager.GetCorresponding(_frame_count - 1, _frame_count);
             Eigen::Matrix3d calib_ric;
             if (_initial_ex_rotation.CalibrationExRotation(corres, _pre_integrations[_frame_count]->_delta_q, calib_ric)){
                 LOG(INFO) << "Calibration Successed";
@@ -97,7 +99,7 @@ void Estimator::ProcessImage(const std::map<int, std::vector<std::pair<int, Eige
             _frame_count++;
     }
     else{
-
+        SolveOdometry();
     }
 }
 
@@ -258,14 +260,11 @@ bool Estimator::RelativePose(Eigen::Matrix3d &relative_R, Eigen::Vector3d &relat
             for (int j = 0; j < int(corres.size()); j++) {
                 Eigen::Vector2d pts_0(corres[j].first(0), corres[j].first(1));
                 Eigen::Vector2d pts_1(corres[j].second(0), corres[j].second(1));
-                LOG(ERROR) << "pts0: " << pts_0;
-                LOG(ERROR) << "pts1: " << pts_1;
                 double parallax = (pts_0 - pts_1).norm();
                 sum_parallax = sum_parallax + parallax;
             }
             // 求取平均视差
             double average_parallax = sum_parallax / corres.size();
-            LOG(ERROR) << "average parallax: " << average_parallax;
             // 平均视差要大于一定阈值,并且能够有效地求解出变换矩阵.
             if (average_parallax * 460 > 30 && _motion_estimator.SolveRelativeRT(corres, relative_R, relative_T)){
                 l = i;
@@ -303,7 +302,7 @@ bool Estimator::VisualInitialAlign()
         dep[i] = -1;
     _feature_manager.ClearDepth(dep);
 
-    std::vector<Eigen::Vector3d> TIC_TMP(svar.GetInt("number_of_camera", 1));
+    std::vector<Eigen::Vector3d> TIC_TMP(svar.GetInt("camera_number", 1));
     for(int i = 0; i < TIC_TMP.size(); ++i)
         TIC_TMP[i].setZero();
     _ric[0] = para._Ric;
@@ -403,10 +402,36 @@ void Estimator::SlideWindow()
         }
     }
     else{
+        // 只有当滑动窗口满了才margin new帧
+        // 将_frame_count帧margin了, 将这个帧的信息传入到上一帧中.
         if(_frame_count == svar.GetInt("window_size", 20)){
             for(unsigned int i = 0; i < _dt_buf[_frame_count].size(); ++i){
+                double tmp_dt = _dt_buf[_frame_count][i];
+                Eigen::Vector3d tmp_linear_acceleration = _linear_acceleration_buf[_frame_count][i];
+                Eigen::Vector3d tmp_angular_velocity = _angular_velocity_buf[_frame_count][i];
 
+                _pre_integrations[_frame_count - 1] ->PushBack(tmp_dt, tmp_linear_acceleration, tmp_angular_velocity);
+                _dt_buf[_frame_count - 1].emplace_back(tmp_dt);
+                _linear_acceleration_buf[_frame_count - 1].emplace_back(tmp_linear_acceleration);
+                _angular_velocity_buf[_frame_count - 1].emplace_back(tmp_angular_velocity);
             }
+
+            _headers[_frame_count - 1] = _headers[_frame_count];
+            _Ps[_frame_count - 1] = _Ps[_frame_count];
+            _Vs[_frame_count - 1] = _Vs[_frame_count];
+            _Rs[_frame_count - 1] = _Rs[_frame_count];
+            _Bas[_frame_count - 1] = _Bas[_frame_count];
+            _Bgs[_frame_count - 1] = _Bgs[_frame_count];
+
+            _pre_integrations[svar.GetInt("window_size", 20)] =
+                std::shared_ptr<IntegrationBase>(new IntegrationBase{_acc0, _gyr0,
+                                                                     _Bas[svar.GetInt("window_size", 20)],
+                                                                     _Bgs[svar.GetInt("window_size", 20)]});
+            _dt_buf[svar.GetInt("window_size", 20)].clear();
+            _linear_acceleration_buf[svar.GetInt("window_size", 20)].clear();
+            _angular_velocity_buf[svar.GetInt("window_size", 20)].clear();
+
+            SlideWindowNew();
         }
     }
 }
@@ -429,3 +454,110 @@ void Estimator::SlideWindowOld()
     else
         _feature_manager.RemoveBack();
 }
+
+void Estimator::SlideWindowNew()
+{
+    _sum_of_front++;
+    _feature_manager.RemoveFront(_frame_count);
+}
+
+void Estimator::SolveOdometry()
+{
+    if (_frame_count < svar.GetInt("window_size", 20))
+        return;
+    if (_solver_flag == NON_LINEAR){
+        // 三角化那些没有被三角化的点.
+        _feature_manager.Triangulate(_Ps, _tic, _ric);
+        BackendOptimization();
+    }
+}
+
+void Estimator::BackendOptimization()
+{
+    ceres::Problem problem;
+    ceres::LossFunction *loss_function = new ceres::CauchyLoss(1.0);
+    // 第一步: 添加待优化状态量
+    // 添加[p, q](7), [speed, ba, bg](9)
+    for(int i = 0; i < svar.GetInt("window_size", 20); ++i){
+        // FIXME: 看不懂这个PoseLocalParameterization中的函数是干吗的.
+        ceres::LocalParameterization *local_parameterization = new PoseLocalParameterization();
+        problem.AddParameterBlock(_para_pose[i].data(), POSE_SIZE, local_parameterization);
+        problem.AddParameterBlock(_para_speed_bias[i].data(), SPEED_BIAS);
+    }
+
+    for(int i = 0; i < svar.GetInt("camera_number", 1); ++i){
+        ceres::LocalParameterization *local_parameterization = new PoseLocalParameterization();
+        problem.AddParameterBlock(_para_ex_pose[i].data(), POSE_SIZE, local_parameterization);
+        if(_estimate_extrinsic){
+            LOG(INFO) << "Fix Extinsic Parameters";
+            problem.SetParameterBlockConstant(_para_ex_pose[i].data());
+        }
+        else
+            LOG(INFO) << "Estimate Extinsic Parameters";
+    }
+
+    if (svar.GetInt("estimate_td", 1)){
+        problem.AddParameterBlock(_para_td[0].data(), 1);
+    }
+
+    Vector2Double();
+
+    // 上一次边缘化的信息
+    if (_last_marginalization_info){
+
+    }
+    // 添加Imu的residual
+    for(int i = 0; i < svar.GetInt("window_size", 20); ++i){
+        int j = i + 1;
+        // FIXME: 这里的意思是某个滑动窗口时间太长了, 但是这在实际的SLAM中是有可能的
+        // 比如无人机一直待在某个地方不动, 一直Margin Second New
+        if (_pre_integrations[j]->_sum_dt > 10.0)
+            continue;
+        std::shared_ptr<ImuFactor> imu_factor = std::shared_ptr<ImuFactor>(new ImuFactor(_pre_integrations[j]));
+        problem.AddResidualBlock(imu_factor, NULL, _para_pose[i], _para_speed_bias[i], _para_pose[j], _para_speed_bias[j]);
+
+    }
+}
+
+void Estimator::Vector2Double()
+{
+    for(int i = 0; i <= svar.GetInt("window_size", 20); ++i){
+        _para_pose[i][0] = _Ps[i].x();
+        _para_pose[i][1] = _Ps[i].y();
+        _para_pose[i][2] = _Ps[i].z();
+        Eigen::Quaterniond q{_Rs[i]};
+        _para_pose[i][3] = q.x();
+        _para_pose[i][4] = q.y();
+        _para_pose[i][5] = q.z();
+        _para_pose[i][6] = q.w();
+
+        _para_speed_bias[i][0] = _Vs[i].x();
+        _para_speed_bias[i][1] = _Vs[i].y();
+        _para_speed_bias[i][2] = _Vs[i].z();
+
+        _para_speed_bias[i][3] = _Bas[i].x();
+        _para_speed_bias[i][4] = _Bas[i].y();
+        _para_speed_bias[i][5] = _Bas[i].z();
+
+        _para_speed_bias[i][6] = _Bgs[i].x();
+        _para_speed_bias[i][7] = _Bgs[i].y();
+        _para_speed_bias[i][8] = _Bgs[i].z();
+    }
+    for(int i = 0; i < svar.GetInt("camera_number", 1); ++i){
+        _para_ex_pose[i][0] = _tic[i].x();
+        _para_ex_pose[i][1] = _tic[i].y();
+        _para_ex_pose[i][2] = _tic[i].z();
+        Eigen::Quaterniond q{_ric[i]};
+        _para_ex_pose[i][3] = q.x();
+        _para_ex_pose[i][4] = q.y();
+        _para_ex_pose[i][5] = q.z();
+        _para_ex_pose[i][6] = q.w();
+    }
+    Eigen::VectorXd dep = _feature_manager.GetDepthVector();
+    // FIXME: 这样不会越界吗? 还是滑动窗口中的特征点数量太少了.
+    for(int i = 0; i < _feature_manager.GetFeatureCount(); ++i)
+        _para_feature[i][0] = dep(i);
+    if (svar.GetInt("estiamte_td", 1))
+        _para_td[0][0] = _td;
+}
+
