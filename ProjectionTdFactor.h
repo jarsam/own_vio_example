@@ -7,6 +7,7 @@
 
 #include <ceres/ceres.h>
 #include <Eigen/Dense>
+#include <GSLAM/core/GSLAM.h>
 
 #include "Utility.h"
 #include "Parameters.h"
@@ -46,7 +47,7 @@ public:
      * TR / ROW * row_i 是相机 rolling 到这一行时所用的时间
      * 最后得到的pts_i_td是处理时间同步误差和Rolling shutter时间后，角点在归一化平面的坐标
      */
-     
+
     bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
     {
         Eigen::Vector3d    Pi(parameters[0][0], parameters[0][1], parameters[0][2]);
@@ -57,6 +58,13 @@ public:
         Eigen::Quaterniond qic(parameters[2][6], parameters[2][3], parameters[2][4], parameters[2][5]);
 
         double inv_dep_i = parameters[3][0];
+        double td = parameters[4][0];
+
+        Eigen::Vector3d pts_i_td, pts_j_td;
+        double TR = svar.GetDouble("tr", 0);
+        double ROW = para._height;
+        pts_i_td = _pts_i - (td - _td_i + TR / ROW * _row_i) * _velocity_i;
+        pts_j_td = _pts_j - (td - _td_j + TR / ROW * _row_j) * _velocity_j;
     }
 
     static Eigen::Matrix2d _sqrt_info;
