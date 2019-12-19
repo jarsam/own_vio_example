@@ -51,7 +51,10 @@ public:
             Eigen::Matrix3d dq_dbg = _pre_integration->_jacobian.template block<3, 3>(O_R, O_BG);
             Eigen::Matrix3d dv_dba = _pre_integration->_jacobian.template block<3, 3>(O_V, O_BA);
             Eigen::Matrix3d dv_dbg = _pre_integration->_jacobian.template block<3, 3>(O_V, O_BG);
+            Eigen::Quaterniond corrected_delta_q =
+                _pre_integration->_delta_q * Utility::DeltaQ(dq_dbg * (Bgi - _pre_integration->_linearized_bg));
 
+            // 这里的jacobians[0]代表的是状态量对p_i和q_i的导数
             if (jacobians[0]){
                 // 要注意这里的旋转矩阵正逆关系
                 Eigen::Map<Eigen::Matrix<double, 15, 7, Eigen::RowMajor> > jacobian_pose_i(jacobians[0]);
@@ -59,14 +62,52 @@ public:
                 jacobian_pose_i.block<3, 3>(O_P, O_P) = -Qi.inverse().toRotationMatrix();
                 jacobian_pose_i.block<3, 3>(O_P, O_R) =
                     Utility::SkewSymmetric(Qi.inverse() * (0.5 * para._G * sum_dt * sum_dt + Pj - Pi - Vi * sum_dt));
-                Eigen::Quaterniond corrected_delta_q =
-                    _pre_integration->_delta_q * Utility::DeltaQ(dq_dbg * (Bgi - _pre_integration->_linearized_bg));
+                jacobian_pose_i.block<3, 3>(O_R, O_R) =
+                    -(Utility::Qleft(Qj.inverse() * Qi) *
+                      Utility::Qright(corrected_delta_q)).bottomRightCorner<3, 3>();
                 jacobian_pose_i.block<3, 3>(O_V, O_R) =
                     Utility::SkewSymmetric(Qi.inverse() * (para._G * sum_dt + Vj - Vi));
                 // 注意到这里同样乘了sqrt_info
                 jacobian_pose_i = sqrt_info * jacobian_pose_i;
             }
+            // 状态量对v_i, ba_i, bg_i的导数
+            if(jacobians[1]){
+                Eigen::Map<Eigen::Matrix<double, 15, 9, Eigen::RowMajor> > jacobian_speed_bias_i(jacobians[1]);
+                jacobian_speed_bias_i.setZero();
+                // 之所以要减O_V是因为要放到jacobian_speed_bias_i[15, 9]对应的地方
+                jacobian_speed_bias_i.block<3, 3>(O_P, O_V - O_V) = -Qi.inverse().toRotationMatrix() * sum_dt;
+                jacobian_speed_bias_i.block<3, 3>(O_P, O_BA - O_V) = -dp_dba;
+                jacobian_speed_bias_i.block<3, 3>(O_P, O_BG - O_V) = -dp_dbg;
+                jacobian_speed_bias_i.block<3, 3>(O_R, O_BG - O_V) =
+                    -Utility::Qleft(Qj.inverse() * Qi * _pre_integration->_delta_q).bottomRightCorner<3, 3>() * dq_dbg;
+                jacobian_speed_bias_i.block<3, 3>(O_V, O_V - O_V) = -Qi.inverse().toRotationMatrix();
+                jacobian_speed_bias_i.block<3, 3>(O_V, O_BA - O_V) = -dv_dba;
+                jacobian_speed_bias_i.block<3, 3>(O_V, O_BG - O_V) = -dv_dbg;
+                jacobian_speed_bias_i.block<3, 3>(O_BA, O_BA - O_V) = -Eigen::Matrix3d::Identity();
+                jacobian_speed_bias_i.block<3, 3>(O_BG, O_BG - O_V) = -Eigen::Matrix3d::Identity();
+                jacobian_speed_bias_i = sqrt_info * jacobian_speed_bias_i;
+            }
+            // 状态量对p_j, q_j的导数
+            if(jacobians[2]){
+                Eigen::Map<Eigen::Matrix<double, 15, 7, Eigen::RowMajor> > jacobian_pose_j(jacobians[2]);
+                jacobian_pose_j.setZero();
+                jacobian_pose_j.block<3, 3>(O_P, O_P) = Qi.inverse().toRotationMatrix();
+                jacobian_pose_j.block<3, 3>(O_R, O_R) =
+                    Utility::Qleft(corrected_delta_q.inverse() * Qi.inverse() * Qj).bottomRightCorner<3, 3>();
+                jacobian_pose_j = sqrt_info * jacobian_pose_j;
+            }
+            // 状态量对v_j, ba_j, bg_j的导数
+            if(jacobians[3]){
+                Eigen::Map<Eigen::Matrix<double, 15, 9, Eigen::RowMajor> > jacobian_speed_bias_j(jacobians[3]);
+                jacobian_speed_bias_j.setZero();
+                jacobian_speed_bias_j.block<3, 3>(O_V, O_V - O_V) = Qi.inverse().toRotationMatrix();
+                jacobian_speed_bias_j.block<3, 3>(O_BA,O_BA - O_V) = Eigen::Matrix3d::Identity();
+                jacobian_speed_bias_j.block<3, 3>(O_BG, O_BG - O_V) = Eigen::Matrix3d::Identity();
+                jacobian_speed_bias_j = sqrt_info * jacobian_speed_bias_j;
+            }
         }
+
+        return true;
     }
 
     std::shared_ptr<IntegrationBase> _pre_integration;

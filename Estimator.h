@@ -19,6 +19,7 @@
 #include "MotionEstimator.h"
 #include "MarginalizaitonFactor.h"
 #include "ImuFactor.h"
+#include "ProjectionTdFactor.h"
 
 class Estimator
 {

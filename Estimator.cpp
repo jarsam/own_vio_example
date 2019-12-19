@@ -514,8 +514,30 @@ void Estimator::BackendOptimization()
         if (_pre_integrations[j]->_sum_dt > 10.0)
             continue;
         std::shared_ptr<ImuFactor> imu_factor = std::shared_ptr<ImuFactor>(new ImuFactor(_pre_integrations[j]));
-        problem.AddResidualBlock(imu_factor, NULL, _para_pose[i], _para_speed_bias[i], _para_pose[j], _para_speed_bias[j]);
+        problem.AddResidualBlock(imu_factor.get(), NULL, _para_pose[i].data(), _para_speed_bias[i].data(), _para_pose[j].data(), _para_speed_bias[j].data());
+    }
 
+    int feature_cnt = 0;
+    int feature_index = -1;
+    for(auto &it_per_id: _feature_manager._feature){
+        it_per_id._used_num = it_per_id._feature_per_frame.size();
+        if (!(it_per_id._used_num >= 2 && it_per_id._start_frame < svar.GetInt("window_size", 20) - 2))
+            continue;
+        ++feature_index;
+        //  得到观测到该特征点的首帧
+        int imu_i = it_per_id._start_frame, imu_j = imu_i - 1;
+        // 得到首帧观测到的特征点
+        Eigen::Vector3d pts_i = it_per_id._feature_per_frame[0]._point;
+        for(auto &it_per_frame: it_per_id._feature_per_frame){
+            imu_j++;
+            if(imu_i == imu_j)
+                continue;
+
+            Eigen::Vector3d pts_j = it_per_frame._point;
+            if(svar.GetInt("estimate_td", 1)){
+                auto
+            }
+        }
     }
 }
 
