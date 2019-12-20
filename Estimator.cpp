@@ -517,7 +517,8 @@ void Estimator::BackendOptimization()
         problem.AddResidualBlock(imu_factor.get(), NULL, _para_pose[i].data(), _para_speed_bias[i].data(), _para_pose[j].data(), _para_speed_bias[j].data());
     }
 
-    int feature_cnt = 0;
+    // 特征点的测量值的数量
+    int feature_measurement_cnt = 0;
     int feature_index = -1;
     for(auto &it_per_id: _feature_manager._feature){
         it_per_id._used_num = it_per_id._feature_per_frame.size();
@@ -528,6 +529,7 @@ void Estimator::BackendOptimization()
         int imu_i = it_per_id._start_frame, imu_j = imu_i - 1;
         // 得到首帧观测到的特征点
         Eigen::Vector3d pts_i = it_per_id._feature_per_frame[0]._point;
+        // it_per_frame 是除了首帧之外的点.
         for(auto &it_per_frame: it_per_id._feature_per_frame){
             imu_j++;
             if(imu_i == imu_j)
@@ -535,10 +537,53 @@ void Estimator::BackendOptimization()
 
             Eigen::Vector3d pts_j = it_per_frame._point;
             if(svar.GetInt("estimate_td", 1)){
-                auto
+                std::shared_ptr<ProjectionTdFactor> function_td =
+                    std::shared_ptr<ProjectionTdFactor>(new ProjectionTdFactor(pts_i, pts_j,
+                        it_per_id._feature_per_frame[0]._velocity, it_per_frame._velocity,
+                        it_per_id._feature_per_frame[0]._cur_td, it_per_frame._cur_td,
+                        it_per_id._feature_per_frame[0]._uv.y(), it_per_frame._uv.y()));
+                problem.AddResidualBlock(function_td.get(), loss_function, _para_pose[imu_i].data(), _para_pose[imu_j].data(),
+                                         _para_ex_pose[0].data(), _para_feature[feature_index].data(), _para_td[0].data());
+            }
+            else{
+                std::shared_ptr<ProjectionFactor> function_td =
+                    std::shared_ptr<ProjectionFactor>(new ProjectionFactor(pts_i, pts_j));
+                problem.AddResidualBlock(function_td.get(), loss_function, _para_pose[imu_i].data(), _para_pose[imu_j].data(),
+                                         _para_ex_pose[0].data(), _para_feature[feature_index].data());
+
+            }
+            feature_measurement_cnt++;
+        }
+    }
+
+    if (_relocalization_info){
+        std::shared_ptr<ceres::LocalParameterization> local_parameterization =
+            std::shared_ptr<ceres::LocalParameterization>(new PoseLocalParameterization());
+        problem.AddParameterBlock(_relo_pose.data(), POSE_SIZE, local_parameterization.get());
+        int retrive_feature_index = 0;
+        int feature_index = -1;
+        for(auto &it_per_id: _feature_manager._feature){
+            it_per_id._used_num = it_per_id._feature_per_frame.size();
+            if (!(it_per_id._used_num >= 2 && it_per_id._start_frame < svar.GetInt("window_size", 20) - 2))
+                continue;
+            ++feature_index;
+            int start = it_per_id._start_frame;
+            if (start <= _relo_frame_local_index){
             }
         }
     }
+
+    ceres::Solver::Options options;
+    options.linear_solver_type = ceres::DENSE_SCHUR;
+    options.trust_region_strategy_type = ceres::DOGLEG;
+    options.max_num_iterations = 100;
+    if (_marginalization_flag == MARGIN_OLD)
+        options.max_solver_time_in_seconds = 0.04 * 4 / 5.0;
+    else
+        options.max_solver_time_in_seconds = 0.04;
+
+    ceres::Solver::Summary summary;
+    ceres::Solve(options, &problem, &summary);
 }
 
 void Estimator::Vector2Double()
@@ -583,3 +628,14 @@ void Estimator::Vector2Double()
         _para_td[0][0] = _td;
 }
 
+void Estimator::Double2Vector()
+{
+    Eigen::Vector3d origin_R0 = Utility::R2YPR(_Rs[0]);
+    Eigen::Vector3d origin_P0 = _Ps[0];
+
+    if (_failure_occur){
+        origin_R0 = Utility::R2YPR(_lastR0);
+        origin_P0 = _lastP0;
+        _failure_occur = 0;
+    }
+}

@@ -20,6 +20,7 @@
 #include "MarginalizaitonFactor.h"
 #include "ImuFactor.h"
 #include "ProjectionTdFactor.h"
+#include "ProjectionFactor.h"
 
 class Estimator
 {
@@ -44,6 +45,8 @@ public:
 
 private:
     void ClearState(){
+        _failure_occur = false;
+        _relocalization_info = false;
         _first_imu = false;
         _solver_flag = INITIAL;
         _initial_timestamp = 0;
@@ -67,6 +70,7 @@ private:
         _para_feature.resize(svar.GetInt("feature_number", 1000), std::vector<double>(FEATURE_SIZE, 0));
         _para_ex_pose.resize(svar.GetInt("camera_number", 1), std::vector<double>(POSE_SIZE, 0));
         _para_retrive_pose.resize(POSE_SIZE, 0.0);
+        _relo_pose.resize(POSE_SIZE, 0.0);
         _para_td.resize(1, std::vector<double>(1, 0));
         _para_tr.resize(1, std::vector<double>(1, 0));
 
@@ -93,28 +97,32 @@ private:
     void SolveOdometry();
     void BackendOptimization();
     void Vector2Double();
+    void Double2Vector();
 
 public:
     SolverFlag _solver_flag;
     MarginalizationFlag _marginalization_flag;
 
+    bool _failure_occur;
+    bool _relocalization_info;
     bool _first_imu;
     int _estimate_extrinsic;
     int _sum_of_back, _sum_of_front;// Margin_Old和Margin_New的次数
     // 滑窗中的帧数
     // 应该是_frame_count = 1的时候才是第一帧.
     int _frame_count;
+    int _relo_frame_local_index;
     double _initial_timestamp, _td;
 
+    std::vector<double> _headers;
+    std::vector<double> _para_retrive_pose;
+    std::vector<double> _relo_pose;
     std::vector<std::vector<double> > _para_pose;
     std::vector<std::vector<double> > _para_speed_bias;
     std::vector<std::vector<double> > _para_feature;
     std::vector<std::vector<double> > _para_ex_pose;
-    std::vector<double> _para_retrive_pose;
     std::vector<std::vector<double> > _para_td;
     std::vector<std::vector<double> > _para_tr;
-
-    std::vector<double> _headers;
 
     Eigen::Vector3d _g;
     Eigen::Vector3d _acc0, _gyr0;// 最近一次接收到的Imu数据
@@ -124,6 +132,7 @@ public:
 
     std::vector<std::shared_ptr<IntegrationBase>> _pre_integrations;
 
+    std::vector<Eigen::Vector3d> _match_points;
     std::vector<Eigen::Matrix3d> _ric;// 从相机到Imu的旋转
     std::vector<Eigen::Vector3d> _tic;// 从相机到Imu的平移
     std::vector<Eigen::Vector3d> _Ps;// 滑动窗口中各帧在世界坐标系下的位置
