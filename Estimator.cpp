@@ -402,6 +402,7 @@ void Estimator::SlideWindow()
         }
     }
     else{
+        // FIXME: 这不是margin了最新一帧吗?
         // 只有当滑动窗口满了才margin new帧
         // 将_frame_count帧margin了, 将这个帧的信息传入到上一帧中.
         if(_frame_count == svar.GetInt("window_size", 20)){
@@ -584,6 +585,83 @@ void Estimator::BackendOptimization()
 
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
+    Double2Vector();
+
+    if (_marginalization_flag == MARGIN_OLD){
+        std::shared_ptr<MarginalizationInfo> marginalization_info(new MarginalizationInfo());
+        Vector2Double();
+
+        if (_last_marginalization_info){
+            std::vector<int> drop_set;
+
+        }
+        // 添加Imu的先验, 只包含旧帧的Imu测量残差
+        {
+            if (_pre_integrations[1]->_sum_dt < 10.0){
+                std::shared_ptr<ImuFactor> imu_factor(new ImuFactor(_pre_integrations[1]));
+                std::shared_ptr<ResidualBlockInfo> residual_block_info(
+                    new ResidualBlockInfo(imu_factor, nullptr,
+                        std::vector<double *> {_para_pose[0], _para_speed_bias[0], _para_pose[1], _para_speed_bias[1]},
+                        std::vector<int>{0, 1}));
+                marginalization_info->AddResidualBlockInfo(residual_block_info);
+            }
+        }
+
+        // 添加视觉的先验
+        {
+            int feature_index = -1;
+            // 遍历滑窗内的所有features
+            for(auto &it_per_id: _feature_manager._feature){
+                // 该特征点被观测到的次数
+                it_per_id._used_num = it_per_id._feature_per_frame.size();
+                if(!(it_per_id._used_num >= 2 && it_per_id._start_frame < svar.GetInt("window_size", 20) - 2))
+                    continue;
+                ++feature_index;
+
+                int imu_i = it_per_id._start_frame, imu_j = imu_i - 1;
+                if (imu_i != 0)
+                    continue;
+                // 该feature在起始帧的归一化坐标
+                Eigen::Vector3d pts_i = it_per_id._feature_per_frame[0]._point;
+
+                for(auto &it_per_frame: it_per_id._feature_per_frame){
+                    imu_j++;
+                    if(imu_i == imu_j)
+                        continue;
+
+                    Eigen::Vector3d pts_j = it_per_frame._point;
+                    if(svar.GetInt("estimate_td", 1)) {
+                        std::shared_ptr<ProjectionTdFactor> function_td =
+                            std::shared_ptr<ProjectionTdFactor>(new ProjectionTdFactor(pts_i, pts_j,
+                                it_per_id._feature_per_frame[0]._velocity, it_per_frame._velocity,
+                                it_per_id._feature_per_frame[0]._cur_td, it_per_frame._cur_td,
+                                it_per_id._feature_per_frame[0]._uv.y(), it_per_frame._uv.y()));
+
+                        std::shared_ptr<ResidualBlockInfo> residual_block_info =
+                            std::shared_ptr<ResidualBlockInfo>(new ResidualBlockInfo(function_td,
+                                std::vector<double*>{_para_pose[imu_i], _para_pose[imu_j], _para_ex_pose[0],
+                                                     _para_feature[feature_index], _para_td[0]}, std::vector<int>{0, 3}));
+
+                        marginalization_info->AddResidualBlockInfo(residual_block_info);
+                    }
+                    else{
+                        std::shared_ptr<ProjectionTdFactor> function_td =
+                            std::shared_ptr<ProjectionTdFactor>(new ProjectionFactor(pts_i, pts_j));
+                        std::shared_ptr<ResidualBlockInfo> residual_block_info =
+                            std::shared_ptr<ResidualBlockInfo>(
+                                new ResidualBlockInfo(function_td,
+                                    std::vector<double*>{_para_pose[imu_i], _para_pose[imu_j], _para_ex_pose[0],
+                                                         _para_feature[feature_index], std::vector<int>{0, 3}}));
+
+                        marginalization_info->AddResidualBlockInfo(residual_block_info);
+                    }
+                }
+            }
+        }
+
+        marginalization_info->PreMarginalize();
+        marginalization_info->Marginalize();
+    }
 }
 
 void Estimator::Vector2Double()
