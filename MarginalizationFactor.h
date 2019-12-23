@@ -10,6 +10,7 @@
 #include <unordered_map>
 
 #include <ceres/ceres.h>
+#import <GSLAM/core/GSLAM.h>
 
 #include "Utility.h"
 
@@ -26,7 +27,7 @@ public:
 
     std::shared_ptr<ceres::CostFunction> _cost_function;
     std::shared_ptr<ceres::LossFunction> _loss_function;
-    std::vector<double*> _parameter_blocks;
+    std::vector<double*> _parameter_blocks;// 传入的参数
     std::vector<int> _drop_set;// 待marg的优化变量id
 
     double **_raw_jacobians;
@@ -36,6 +37,15 @@ public:
     int LocalSize(int size){
         return size == 7 ? 6 : size;
     }
+};
+
+struct ThreadStruct
+{
+    std::vector<std::shared_ptr<ResidualBlockInfo> > _sub_factors;
+    Eigen::MatrixXd _A;
+    Eigen::VectorXd _b;
+    std::unordered_map<long, int> _parameter_block_size;
+    std::unordered_map<long, int> _parameter_block_idx;
 };
 
 // 存入所有的误差函数
@@ -49,6 +59,7 @@ public:
     void AddResidualBlockInfo(std::shared_ptr<ResidualBlockInfo> residual_block_info);
     void PreMarginalize();
     void Marginalize();
+    std::vector<double *> GetParameterBlocks(std::unordered_map<long, std::vector<double> > &addr_shift);
 
     std::vector<std::shared_ptr<ResidualBlockInfo> > _factors;
     // _m为要margin掉的变量个数,也就是parameter_block_idx的总localSize, 以double为单位, VBias为9, PQ为6
@@ -56,16 +67,27 @@ public:
     int _m, _n;
     // long代表的是地址, int代表的是size
     std::unordered_map<long, int> _parameter_block_size; // global size
-    // 这个变量代表的是要marg的变量, long代表地址, int给0代表要marg
+    // long代表地址, int代表参数的位置, 要marg的变量会放在前面
     std::unordered_map<long, int> _parameter_block_idx; // local size
     // long代表的是地址, double *代表的是参数
     std::unordered_map<long, double *> _parameter_block_data;// 每个Factor中的参数
+
+    const double _eps = 1e-8;
+
+    Eigen::MatrixXd _linearized_jacobians;
+    Eigen::VectorXd _linearized_residuals;
+
+    std::vector<int> _keep_block_size;// 存的是没marg的变量的大小
+    std::vector<int> _keep_block_idx;// 存的是没marg的变量的位置
+    std::vector<double *> _keep_block_data; // 存的是没marg的变量的数据
+
+    int _sum_block_size;
 };
 
-class MarginalizaitonFactor: public ceres::CostFunction
+class MarginalizationFactor: public ceres::CostFunction
 {
 public:
-    MarginalizaitonFactor(MarginalizationInfo* marginalization_info);
+    MarginalizationFactor(MarginalizationInfo* marginalization_info);
     virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians)const;
 
     MarginalizationInfo* _marginalization_info;

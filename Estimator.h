@@ -17,7 +17,7 @@
 #include "InitialExRotation.h"
 #include "InitialSfM.h"
 #include "MotionEstimator.h"
-#include "MarginalizaitonFactor.h"
+#include "MarginalizationFactor.h"
 #include "ImuFactor.h"
 #include "ProjectionTdFactor.h"
 #include "ProjectionFactor.h"
@@ -151,6 +151,7 @@ public:
     std::shared_ptr<IntegrationBase> _tmp_pre_integration;
     // 上一次边缘化的信息.
     std::shared_ptr<MarginalizationInfo> _last_marginalization_info;
+    std::vector<double *> _last_marginalization_parameter_blocks;
 
     std::map<double, ImageFrame> _all_image_frame;
 };

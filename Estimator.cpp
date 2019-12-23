@@ -645,8 +645,8 @@ void Estimator::BackendOptimization()
                         marginalization_info->AddResidualBlockInfo(residual_block_info);
                     }
                     else{
-                        std::shared_ptr<ProjectionTdFactor> function_td =
-                            std::shared_ptr<ProjectionTdFactor>(new ProjectionFactor(pts_i, pts_j));
+                        std::shared_ptr<ProjectionFactor> function_td =
+                            std::shared_ptr<ProjectionFactor>(new ProjectionFactor(pts_i, pts_j));
                         std::shared_ptr<ResidualBlockInfo> residual_block_info =
                             std::shared_ptr<ResidualBlockInfo>(
                                 new ResidualBlockInfo(function_td,
@@ -661,6 +661,44 @@ void Estimator::BackendOptimization()
 
         marginalization_info->PreMarginalize();
         marginalization_info->Marginalize();
+
+        // FIXME: 为什么是向右移位, 并且没保留逆深度的状态量
+        std::unordered_map<long, std::vector<double> > addr_shift;
+        for(int i = 1; i <= svar.GetInt("window_size", 20); ++i){
+            addr_shift[reinterpret_cast<long>(_para_pose[i].data())] = _para_pose[i - 1];
+            addr_shift[reinterpret_cast<long>(_para_speed_bias[i].data())] = _para_speed_bias[i - 1];
+        }
+        for(int i = 0; i < svar.GetInt("camera_number", 1); ++i)
+            addr_shift[reinterpret_cast<long>(_para_ex_pose[i].data())] = _para_ex_pose[i];
+        if(svar.GetInt("estimate_td", 1))
+            addr_shift[reinterpret_cast<long>(_para_td[0].data())] = _para_td[0];
+
+        std::vector<double *> parameter_blocks = marginalization_info->GetParameterBlocks(addr_shift);
+
+        _last_marginalization_info = marginalization_info;
+        _last_marginalization_parameter_blocks = parameter_blocks;
+    }
+    // 边缘化倒数第二帧
+    else{
+        // 只有当上一次margin了且上一次的参数中包含倒数第二帧的位姿信息才边缘化倒数第二帧
+        if(_last_marginalization_info &&
+            std::count(std::begin(_last_marginalization_parameter_blocks),
+                std::end(_last_marginalization_parameter_blocks),
+                _para_pose[svar.GetInt("window_size", 20) - 1].data())){
+            std::shared_ptr<MarginalizationInfo> marginalization_info(new MarginalizationInfo());
+            Vector2Double();
+
+            std::vector<int> drop_set;
+            for(int i = 0; i < _last_marginalization_parameter_blocks.size(); ++i){
+                // 寻找倒数第二帧的位姿
+                if(_last_marginalization_parameter_blocks[i] == _para_pose[svar.GetInt("window_size", 20)].data())
+                    drop_set.emplace_back(i);
+
+                std::shared_ptr<MarginalizationFactor> marginalization_factor(new MarginalizationFactor(_last_marginalization_info));
+                std::shared_ptr<ResidualBlockInfo> residual_block_info(new ResidualBlockInfo(marginalization_factor,
+                    NULL, _last_marginalization_parameter_blocks, drop_set));
+            }
+        }
     }
 }
 
