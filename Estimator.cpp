@@ -697,6 +697,7 @@ void Estimator::BackendOptimization()
                 std::shared_ptr<MarginalizationFactor> marginalization_factor(new MarginalizationFactor(_last_marginalization_info));
                 std::shared_ptr<ResidualBlockInfo> residual_block_info(new ResidualBlockInfo(marginalization_factor,
                     NULL, _last_marginalization_parameter_blocks, drop_set));
+                marginalization_info->AddResidualBlockInfo(residual_block_info);
             }
         }
     }

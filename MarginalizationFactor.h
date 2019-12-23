@@ -87,10 +87,10 @@ public:
 class MarginalizationFactor: public ceres::CostFunction
 {
 public:
-    MarginalizationFactor(MarginalizationInfo* marginalization_info);
+    MarginalizationFactor(std::shared_ptr<MarginalizationInfo> marginalization_info);
     virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians)const;
 
-    MarginalizationInfo* _marginalization_info;
+    std::shared_ptr<MarginalizationInfo> _marginalization_info;
 };
 
 

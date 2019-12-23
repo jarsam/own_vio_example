@@ -4,6 +4,17 @@
 
 #include "MarginalizationFactor.h"
 
+MarginalizationFactor::MarginalizationFactor(std::shared_ptr<MarginalizationInfo> marginalization_info)
+: _marginalization_info(marginalization_info)
+{
+    int cnt = 0;
+    for(auto it: _marginalization_info->_keep_block_idx){
+        mutable_parameter_block_sizes()->emplace_back(it);
+        cnt += it;
+    }
+    set_num_residuals(marginalization_info->_n);
+}
+
 // 这个函数就将参数传入原本的Evaluate函数中
 void ResidualBlockInfo::Evaluate()
 {
