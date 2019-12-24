@@ -10,7 +10,7 @@
 #include <unordered_map>
 
 #include <ceres/ceres.h>
-#import <GSLAM/core/GSLAM.h>
+#include <GSLAM/core/GSLAM.h>
 
 #include "Utility.h"
 
@@ -90,6 +90,7 @@ public:
     MarginalizationFactor(std::shared_ptr<MarginalizationInfo> marginalization_info);
     virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians)const;
 
+    // 这个_marginalization_info是上一次的边缘化信息
     std::shared_ptr<MarginalizationInfo> _marginalization_info;
 };
 

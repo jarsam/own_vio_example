@@ -62,6 +62,7 @@ void MarginalizationInfo::AddResidualBlockInfo(std::shared_ptr<ResidualBlockInfo
 }
 
 // 调用每个Factor的Evaluate函数, 对_parameter_block_data进行赋值
+// 得到先验项, Imu, 视觉观测对应的参数块, 雅克比矩阵, 残差值.
 void MarginalizationInfo::PreMarginalize()
 {
     for(auto it: _factors){
@@ -157,7 +158,7 @@ void MarginalizationInfo::Marginalize()
     Eigen::MatrixXd Amm = 0.5 * (A.block(0, 0, _m, _m) + A.block(0, 0, _m, _m).transpose());
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes(Amm);
     Eigen::MatrixXd Amm_inv = saes.eigenvectors() *
-        Eigen::VectorXd((saes.eigenvalues().array() > _eps).select(saes.eigenvalues().array().inverse(), 0))).asDiagonal() *
+        Eigen::VectorXd((saes.eigenvalues().array() > _eps).select(saes.eigenvalues().array().inverse(), 0)).asDiagonal() *
         saes.eigenvectors().transpose();
 
     Eigen::VectorXd bmm = b.segment(0, _m);
@@ -191,10 +192,52 @@ std::vector<double *> MarginalizationInfo::GetParameterBlocks(
             _keep_block_size.emplace_back(_parameter_block_size[it.first]);
             _keep_block_idx.emplace_back(_parameter_block_idx[it.first]);
             _keep_block_data.emplace_back(_parameter_block_data[it.first]);
-            keep_block_addr.emplace_back(addr_shift[it.first]);
+            keep_block_addr.emplace_back(addr_shift[it.first].data());
         }
     }
 
     _sum_block_size = std::accumulate(std::begin(_keep_block_size), std::end(_keep_block_size), 0);
     return keep_block_addr;
+}
+
+bool MarginalizationFactor::Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
+{
+    int n = _marginalization_info->_n;
+    int m = _marginalization_info->_m;
+    Eigen::VectorXd dx(n);
+    // FIXME: 该Evaluate函数是在PreMarginalize()函数中调用的, 但是在第一次的时候, _keep_block_idx都没有值.
+    // 且为什么要这么做.
+    for(int i = 0; i < _marginalization_info->_keep_block_idx.size(); ++i){
+        int size = _marginalization_info->_keep_block_idx[i];
+        int idx = _marginalization_info->_keep_block_idx[i] - m;
+        Eigen::VectorXd x = Eigen::Map<const Eigen::VectorXd>(parameters[i], size);
+        Eigen::VectorXd x0 = Eigen::Map<const Eigen::VectorXd>(_marginalization_info->_keep_block_data[i], size);
+        if (size != 7)
+            dx.segment(idx, size) = x - x0;
+        else{
+            dx.segment<3>(idx + 0) = x.head<3>() - x0.head<3>();
+            dx.segment<3>(idx + 3) = 2.0 * Utility::Positify(Eigen::Quaterniond(x0(6), x0(3), x0(4), x0(5)).inverse()
+                * Eigen::Quaterniond(x(6), x(3), x(4), x(5))).vec();
+            if (!((Eigen::Quaterniond(x0(6), x0(3), x0(4), x0(5)).inverse() * Eigen::Quaterniond(x(6), x(3), x(4), x(5))).w() >= 0))
+            {
+                dx.segment<3>(idx + 3) = 2.0 * -Utility::Positify(Eigen::Quaterniond(x0(6), x0(3), x0(4), x0(5)).inverse() * Eigen::Quaterniond(x(6), x(3), x(4), x(5))).vec();
+            }
+        }
+    }
+    Eigen::Map<Eigen::VectorXd>(residuals, n) = _marginalization_info->_linearized_residuals +
+        _marginalization_info->_linearized_jacobians * dx;
+    if(jacobians){
+        for(int i = 0; i < _marginalization_info->_keep_block_idx.size(); ++i){
+            if(jacobians[i]){
+                int size = _marginalization_info->_keep_block_idx[i];
+                int local_size = _marginalization_info->LocalSize(size);
+                int idx = _marginalization_info->_keep_block_idx[i] - m;
+                Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,Eigen::RowMajor>> jacobian(jacobians[i], n, size);
+                jacobian.setZero();
+                jacobian.leftCols(local_size) = _marginalization_info->_linearized_jacobians.middleCols(idx, local_size);
+            }
+        }
+    }
+
+    return true;
 }

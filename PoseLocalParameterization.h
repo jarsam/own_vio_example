@@ -23,8 +23,12 @@ class PoseLocalParameterization: public ceres::LocalParameterization
         q = (_q * dq).normalized();
         return true;
     }
+    // FIXME: 这个干嘛用的..
     virtual bool ComputeJacobian(const double *x, double *jacobian) const{
-
+        Eigen::Map<Eigen::Matrix<double, 7, 6, Eigen::RowMajor> > j(jacobian);
+        j.topRows<6>().setIdentity();
+        j.bottomRows<1>().setZero();
+        return true;
     }
     virtual int GlobalSize() const { return 7; };
     virtual int LocalSize() const { return 6; };

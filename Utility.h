@@ -105,12 +105,18 @@ public:
     template <typename Derived>
     static Eigen::Matrix<typename Derived::Scalar, 4, 4> Qright(const Eigen::QuaternionBase<Derived> &p)
     {
-        Eigen::Quaternion<typename Derived::Scalar> pp = positify(p);
+        Eigen::Quaternion<typename Derived::Scalar> pp = p;
         Eigen::Matrix<typename Derived::Scalar, 4, 4> ans;
         ans(0, 0) = pp.w(), ans.template block<1, 3>(0, 1) = -pp.vec().transpose();
         ans.template block<3, 1>(1, 0) = pp.vec();
-        ans.template block<3, 3>(1, 1) = pp.w() * Eigen::Matrix<typename Derived::Scalar, 3, 3>::Identity() - skewSymmetric(pp.vec());
+        ans.template block<3, 3>(1, 1) = pp.w() * Eigen::Matrix<typename Derived::Scalar, 3, 3>::Identity() - SkewSymmetric(pp.vec());
         return ans;
+    }
+
+    template <typename Derived>
+    static Eigen::Quaternion<typename Derived::Scalar> Positify(const Eigen::QuaternionBase<Derived> &q)
+    {
+        return q;
     }
 };
 

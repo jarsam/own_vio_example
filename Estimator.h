@@ -50,20 +50,26 @@ private:
         _first_imu = false;
         _solver_flag = INITIAL;
         _initial_timestamp = 0;
+        _frame_count = 0;
+        _sum_of_front = 0;
+        _sum_of_back = 0;
+
+        _last_marginalization_info = nullptr;
+        _last_marginalization_parameter_blocks.clear();
 
         _estimate_extrinsic = svar.GetInt("estimate_extrinsic", 2);
-        _Ps.resize(svar.GetInt("window_size", 20) + 1);
-        _Vs.resize(svar.GetInt("window_size", 20) + 1);
-        _Rs.resize(svar.GetInt("window_size", 20) + 1);
-        _Bas.resize(svar.GetInt("window_size", 20) + 1);
-        _Bgs.resize(svar.GetInt("window_size", 20) + 1);
-        _dt_buf.resize(svar.GetInt("window_size", 20) + 1);
-        _linear_acceleration_buf.resize(svar.GetInt("window_size", 20) + 1);
-        _angular_velocity_buf.resize(svar.GetInt("window_size", 20) + 1);
-        _headers.resize(svar.GetInt("window_size", 20) + 1);
+        _Ps.resize(svar.GetInt("window_size", 20) + 1, Eigen::Vector3d::Zero());
+        _Vs.resize(svar.GetInt("window_size", 20) + 1, Eigen::Vector3d::Zero());
+        _Rs.resize(svar.GetInt("window_size", 20) + 1, Eigen::Matrix3d::Zero());
+        _Bas.resize(svar.GetInt("window_size", 20) + 1, Eigen::Vector3d::Zero());
+        _Bgs.resize(svar.GetInt("window_size", 20) + 1, Eigen::Vector3d::Zero());
+        _dt_buf.resize(svar.GetInt("window_size", 20) + 1, std::vector<double>());
+        _linear_acceleration_buf.resize(svar.GetInt("window_size", 20) + 1, std::vector<Eigen::Vector3d>());
+        _angular_velocity_buf.resize(svar.GetInt("window_size", 20) + 1, std::vector<Eigen::Vector3d>());
+        _headers.resize(svar.GetInt("window_size", 20) + 1, 0);
         _pre_integrations.resize(svar.GetInt("window_size", 20) + 1, nullptr);
-        _ric.resize(svar.GetInt("camera_number", 1));
-        _tic.resize(svar.GetInt("camera_number", 1));
+        _ric.resize(svar.GetInt("camera_number", 1), Eigen::Matrix3d::Zero());
+        _tic.resize(svar.GetInt("camera_number", 1), Eigen::Vector3d::Zero());
 
         _para_pose.resize(svar.GetInt("window_size", 20) + 1, std::vector<double>(POSE_SIZE, 0));
         _para_speed_bias.resize(svar.GetInt("window_size", 20) + 1, std::vector<double>(SPEED_BIAS, 0));
@@ -80,12 +86,18 @@ private:
             _Vs[i].setZero();
             _Bas[i].setZero();
             _Bgs[i].setZero();
+        }
 
-            _frame_count = 0;
+        for(auto &it: _all_image_frame){
+            if (it.second._pre_integration != nullptr){
+                it.second._pre_integration = nullptr;
+            }
         }
 
         _feature_manager.ClearState();
         _feature_manager = FeatureManager(_Rs);
+
+        _all_image_frame.clear();
     }
 
     bool InitialStructure();
@@ -98,6 +110,8 @@ private:
     void BackendOptimization();
     void Vector2Double();
     void Double2Vector();
+    bool FailureDetection();
+    void SetParameter();
 
 public:
     SolverFlag _solver_flag;
@@ -132,6 +146,7 @@ public:
 
     std::vector<std::shared_ptr<IntegrationBase>> _pre_integrations;
 
+    std::vector<Eigen::Vector3d> _key_poses;
     std::vector<Eigen::Vector3d> _match_points;
     std::vector<Eigen::Matrix3d> _ric;// 从相机到Imu的旋转
     std::vector<Eigen::Vector3d> _tic;// 从相机到Imu的平移

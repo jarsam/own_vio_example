@@ -97,7 +97,6 @@ bool InitialSfM::Construct(int frame_num, std::vector<Eigen::Quaterniond> &q, st
 
     // 对滑动窗口中的所有帧的位姿和3D特征点进行BA优化
     // 优化的是所有帧的位姿和点云位置.
-    // FIXME: 为什么不先优化位姿再三角化点云?
     ceres::Problem problem;
     ceres::LocalParameterization *local_parameterization = new ceres::QuaternionParameterization();
     for(int i = 0; i < frame_num; ++i){

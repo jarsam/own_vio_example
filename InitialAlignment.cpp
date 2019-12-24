@@ -62,6 +62,9 @@ Eigen::MatrixXd TangentBasis(Eigen::Vector3d &g0){
 
 // 将重力的模看做是已知的, 这样重力向量的自由度就从3变成2了.
 // 通过重力的模精调速度重力向量和尺度因子
+
+// 除了这个方法以外, 还有一个方法, 那就是直接在残差约束中加一个g-9.8
+// 但是这样的话, 雅克比矩阵中就有了与自变量有关的元素, 就不是线性的了, 这样的话, 算起来会比较麻烦, 可能会迭代很多次.
 void RefineGravity(std::map<double, ImageFrame> &all_image_frame, Eigen::Vector3d &g, Eigen::VectorXd &x)
 {
     // g0为9.8乘算出的重力向量
@@ -77,6 +80,7 @@ void RefineGravity(std::map<double, ImageFrame> &all_image_frame, Eigen::Vector3
 
     std::map<double, ImageFrame>::iterator frame_i;
     std::map<double, ImageFrame>::iterator frame_j;
+    // 优化了四次后认为这些参数优化到了一个很好的值了.
     for(int k = 0; k < 4; ++k){
         Eigen::MatrixXd lxly(3, 2);
         lxly = TangentBasis(g0);
@@ -180,8 +184,11 @@ bool LinearAlignment(std::map<double, ImageFrame> &all_image_frame, Eigen::Vecto
     b = b * 1000.0;
     x = A.ldlt().solve(b);
     // FIXME: 为什么要除100?
+    // 据说是因为把尺度求导得到的雅克比除以100, 这就意味着, 尺度这个变量对残差的影响力减弱了100倍,
+    // 最终为了能够消除残差, 优化后的尺度会比实际的大100倍, 所以得到后要再除以100, 这样做的目的是能够让尺度的精度更高.
     double s = x(n_state - 1) / 100.0;
     g = x.segment<3>(n_state - 4);
+    // 只有当优化后的重力接近9.8, 才认为这个重力的向量是好的.
     if (fabs(g.norm() - para._G.norm()) > 1.0 || s < 0)
         return false;
     RefineGravity(all_image_frame, g, x);

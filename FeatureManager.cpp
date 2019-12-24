@@ -249,3 +249,28 @@ void FeatureManager::RemoveFront(int frame_count)
         }
     }
 }
+
+void FeatureManager::SetDepth(const Eigen::VectorXd &x)
+{
+    int feature_index = -1;
+    for(auto &it_per_id: _feature){
+        it_per_id._used_num = it_per_id._feature_per_frame.size();
+        if(!(it_per_id._used_num >= 2 && it_per_id._start_frame < svar.GetInt("window_size", 20) - 2))
+            continue;
+
+        it_per_id._estimated_depth = 1.0 / x(++feature_index);
+        if(it_per_id._estimated_depth < 0)
+            it_per_id._solve_flag = 2;
+        else
+            it_per_id._solve_flag = 1;
+    }
+}
+
+void FeatureManager::RemoveFailures()
+{
+    for(auto it = _feature.begin(), it_next = _feature.begin(); it != _feature.end(); it = it_next){
+        it_next++;
+        if (it->_solve_flag == 2)
+            _feature.erase(it);
+    }
+}

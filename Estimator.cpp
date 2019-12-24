@@ -5,6 +5,17 @@
 #include "PoseLocalParameterization.h"
 #include "Estimator.h"
 
+void Estimator::SetParameter()
+{
+    for(int i = 0; i < svar.GetInt("camera_number", 1); ++i){
+        _tic[i] = para._Tic;
+        _ric[i] = para._Ric;
+    }
+
+    _feature_manager.SetRic(_ric);
+    _td = 0;
+}
+
 void Estimator::ProcessIMU(double dt, const Eigen::Vector3d &linear_acceleration,
                            const Eigen::Vector3d &angular_velocity)
 {
@@ -89,6 +100,14 @@ void Estimator::ProcessImage(const std::map<int, std::vector<std::pair<int, Eige
             if (result){
                 LOG(INFO) << "Initial Construct Successed.";
                 _solver_flag = NON_LINEAR;
+                SolveOdometry();
+                SlideWindow();
+                _feature_manager.RemoveFailures();
+
+                _lastR = _Rs[svar.GetInt("window_size")];
+                _lastP = _Ps[svar.GetInt("window_size")];
+                _lastR0 = _Rs[0];
+                _lastP0 = _Ps[0];
             }
             else {
                 LOG(INFO) << "Initial Construct Failed";
@@ -100,6 +119,23 @@ void Estimator::ProcessImage(const std::map<int, std::vector<std::pair<int, Eige
     }
     else{
         SolveOdometry();
+
+        if (FailureDetection()){
+            _failure_occur = true;
+            ClearState();
+            SetParameter();
+        }
+
+        SlideWindow();
+        _feature_manager.RemoveFailures();
+        _key_poses.clear();
+        for(int i = 0; i <= svar.GetInt("window_size"); ++i)
+            _key_poses.emplace_back(_Ps[i]);
+
+        _lastR = _Rs[svar.GetInt("window_size")];
+        _lastP = _Ps[svar.GetInt("window_size")];
+        _lastR0 = _Rs[0];
+        _lastP0 = _Ps[0];
     }
 }
 
@@ -505,7 +541,8 @@ void Estimator::BackendOptimization()
 
     // 上一次边缘化的信息
     if (_last_marginalization_info){
-
+        std::shared_ptr<MarginalizationFactor> marginalization_factor(new MarginalizationFactor(_last_marginalization_info));
+        problem.AddResidualBlock(marginalization_factor.get(), NULL, _last_marginalization_parameter_blocks);
     }
     // 添加Imu的residual
     for(int i = 0; i < svar.GetInt("window_size", 20); ++i){
@@ -515,7 +552,8 @@ void Estimator::BackendOptimization()
         if (_pre_integrations[j]->_sum_dt > 10.0)
             continue;
         std::shared_ptr<ImuFactor> imu_factor = std::shared_ptr<ImuFactor>(new ImuFactor(_pre_integrations[j]));
-        problem.AddResidualBlock(imu_factor.get(), NULL, _para_pose[i].data(), _para_speed_bias[i].data(), _para_pose[j].data(), _para_speed_bias[j].data());
+        problem.AddResidualBlock(imu_factor.get(), NULL, _para_pose[i].data(), _para_speed_bias[i].data(),
+            _para_pose[j].data(), _para_speed_bias[j].data());
     }
 
     // 特征点的测量值的数量
@@ -591,9 +629,23 @@ void Estimator::BackendOptimization()
         std::shared_ptr<MarginalizationInfo> marginalization_info(new MarginalizationInfo());
         Vector2Double();
 
+        // 先验误差会一直保存, 而不是只使用一次
+        // 如果上一次边缘化的信息存在
+        // 要边缘化的参数块为para_pose[0], para_speed_bias[0], para_feature[feature_index](滑窗内的第feature_index个点的逆深度)
         if (_last_marginalization_info){
             std::vector<int> drop_set;
+            for(int i = 0; i < _last_marginalization_parameter_blocks.size(); ++i){
+                // 如果之前的先验误差中包含要边缘化的参数, 则这一次也要把这个标记上
+                if (_last_marginalization_parameter_blocks[i] == _para_pose[0].data()
+                    || _last_marginalization_parameter_blocks[i] == _para_speed_bias[0].data())
+                    drop_set.emplace_back(i);
 
+                std::shared_ptr<MarginalizationFactor> marginalization_factor(new MarginalizationFactor(_last_marginalization_info));
+                std::shared_ptr<ResidualBlockInfo> residual_block_info(new ResidualBlockInfo(marginalization_factor,
+                                                                                             nullptr, _last_marginalization_parameter_blocks,
+                                                                                             drop_set));
+                marginalization_info->AddResidualBlockInfo(residual_block_info);
+            }
         }
         // 添加Imu的先验, 只包含旧帧的Imu测量残差
         {
@@ -601,13 +653,15 @@ void Estimator::BackendOptimization()
                 std::shared_ptr<ImuFactor> imu_factor(new ImuFactor(_pre_integrations[1]));
                 std::shared_ptr<ResidualBlockInfo> residual_block_info(
                     new ResidualBlockInfo(imu_factor, nullptr,
-                        std::vector<double *> {_para_pose[0], _para_speed_bias[0], _para_pose[1], _para_speed_bias[1]},
+                        std::vector<double *> {_para_pose[0].data(), _para_speed_bias[0].data(),
+                                               _para_pose[1].data(), _para_speed_bias[1].data()},
                         std::vector<int>{0, 1}));
                 marginalization_info->AddResidualBlockInfo(residual_block_info);
             }
         }
 
         // 添加视觉的先验
+        // 挑选出第一次观测帧为滑动窗口第一帧的路标点, 将对应的多组视觉观测放到marginlization_info中
         {
             int feature_index = -1;
             // 遍历滑窗内的所有features
@@ -619,9 +673,11 @@ void Estimator::BackendOptimization()
                 ++feature_index;
 
                 int imu_i = it_per_id._start_frame, imu_j = imu_i - 1;
+
+                // 如果Imu的第一帧不是滑动窗口的第一帧, 则继续遍历下一帧
                 if (imu_i != 0)
                     continue;
-                // 该feature在起始帧的归一化坐标
+                // 该feature在滑动窗口的第一帧的归一化坐标
                 Eigen::Vector3d pts_i = it_per_id._feature_per_frame[0]._point;
 
                 for(auto &it_per_frame: it_per_id._feature_per_frame){
@@ -638,9 +694,9 @@ void Estimator::BackendOptimization()
                                 it_per_id._feature_per_frame[0]._uv.y(), it_per_frame._uv.y()));
 
                         std::shared_ptr<ResidualBlockInfo> residual_block_info =
-                            std::shared_ptr<ResidualBlockInfo>(new ResidualBlockInfo(function_td,
-                                std::vector<double*>{_para_pose[imu_i], _para_pose[imu_j], _para_ex_pose[0],
-                                                     _para_feature[feature_index], _para_td[0]}, std::vector<int>{0, 3}));
+                            std::shared_ptr<ResidualBlockInfo>(new ResidualBlockInfo(function_td, nullptr,
+                                std::vector<double*>{_para_pose[imu_i].data(), _para_pose[imu_j].data(), _para_ex_pose[0].data(),
+                                                     _para_feature[feature_index].data(), _para_td[0].data()}, std::vector<int>{0, 3}));
 
                         marginalization_info->AddResidualBlockInfo(residual_block_info);
                     }
@@ -649,9 +705,9 @@ void Estimator::BackendOptimization()
                             std::shared_ptr<ProjectionFactor>(new ProjectionFactor(pts_i, pts_j));
                         std::shared_ptr<ResidualBlockInfo> residual_block_info =
                             std::shared_ptr<ResidualBlockInfo>(
-                                new ResidualBlockInfo(function_td,
-                                    std::vector<double*>{_para_pose[imu_i], _para_pose[imu_j], _para_ex_pose[0],
-                                                         _para_feature[feature_index], std::vector<int>{0, 3}}));
+                                new ResidualBlockInfo(function_td, nullptr,
+                                    std::vector<double*>{_para_pose[imu_i].data(), _para_pose[imu_j].data(), _para_ex_pose[0].data(),
+                                                         _para_feature[feature_index].data()}, std::vector<int>{0, 3}));
 
                         marginalization_info->AddResidualBlockInfo(residual_block_info);
                     }
@@ -699,6 +755,32 @@ void Estimator::BackendOptimization()
                     NULL, _last_marginalization_parameter_blocks, drop_set));
                 marginalization_info->AddResidualBlockInfo(residual_block_info);
             }
+
+            marginalization_info->PreMarginalize();
+            marginalization_info->Marginalize();
+
+            // FIXME: 感觉把第二十帧的给marg了.
+            std::unordered_map<long, std::vector<double>> addr_shift;
+            for(int i = 0; i <= svar.GetInt("window_size", 20); ++i){
+                if (i == svar.GetInt("window_size", 20) - 1)
+                    continue;
+                else if (i == svar.GetInt("window_size", 20)){
+                    addr_shift[reinterpret_cast<long>(_para_pose[i].data())] = _para_pose[i - 1];
+                    addr_shift[reinterpret_cast<long>(_para_speed_bias[i].data())] = _para_speed_bias[i - 1];
+                }
+                else{
+                    addr_shift[reinterpret_cast<long>(_para_pose[i].data())] = _para_pose[i];
+                    addr_shift[reinterpret_cast<long>(_para_speed_bias[i].data())] = _para_speed_bias[i];
+                }
+            }
+            for(int i = 0; i < svar.GetInt("camera_number", 1); ++i)
+                addr_shift[reinterpret_cast<long>(_para_ex_pose[i].data())] = _para_ex_pose[i];
+            if(svar.GetInt("estimate_td", 1))
+                addr_shift[reinterpret_cast<long>(_para_td[0].data())] = _para_td[0];
+
+            std::vector<double *> parameter_blocks = marginalization_info->GetParameterBlocks(addr_shift);
+            _last_marginalization_info = marginalization_info;
+            _last_marginalization_parameter_blocks = parameter_blocks;
         }
     }
 }
@@ -738,7 +820,7 @@ void Estimator::Vector2Double()
         _para_ex_pose[i][6] = q.w();
     }
     Eigen::VectorXd dep = _feature_manager.GetDepthVector();
-    // FIXME: 这样不会越界吗? 还是滑动窗口中的特征点数量太少了.
+    // FIXME: 这样不会越界吗? 还是滑动窗口中的特征点数量太少了. 初始化只有1000个点
     for(int i = 0; i < _feature_manager.GetFeatureCount(); ++i)
         _para_feature[i][0] = dep(i);
     if (svar.GetInt("estiamte_td", 1))
@@ -755,4 +837,76 @@ void Estimator::Double2Vector()
         origin_P0 = _lastP0;
         _failure_occur = 0;
     }
+    Eigen::Vector3d origin_R00 = Utility::R2YPR(Eigen::Quaterniond(_para_pose[0][6], _para_pose[0][3],
+        _para_pose[0][4], _para_pose[0][5]).toRotationMatrix());
+
+    // FIXME: 这应该是考虑到陀螺仪在roll轴和pitch轴上精度高吧.
+    double y_diff = origin_R0.x() - origin_R00.x();
+    Eigen::Matrix3d rot_diff = Utility::YPR2R(Eigen::Vector3d(y_diff, 0, 0));
+    if(abs(abs(origin_R0.y()) - 90 < 1.0) || abs(abs(origin_R00.y()) - 90) < 1.0){
+        rot_diff = _Rs[0] * Eigen::Quaterniond(_para_pose[0][6], _para_pose[0][3], _para_pose[0][4],
+            _para_pose[0][5]).toRotationMatrix().transpose();
+    }
+    for(int i = 0; i <= svar.GetInt("window_size", 20); ++i){
+        _Rs[i] = rot_diff * Eigen::Quaterniond(_para_pose[i][6], _para_pose[i][3], _para_pose[i][4], _para_pose[i][5]).normalized().toRotationMatrix();
+        _Ps[i] = rot_diff * Eigen::Vector3d(_para_pose[i][0] - _para_pose[0][0], _para_pose[i][1] - _para_pose[0][1],
+                                            _para_pose[i][2] - _para_pose[0][2]) + origin_P0;
+        _Vs[i] = rot_diff * Eigen::Vector3d(_para_speed_bias[i][0], _para_speed_bias[i][1], _para_speed_bias[i][2]);
+        _Bas[i] = Eigen::Vector3d(_para_speed_bias[i][3], _para_speed_bias[i][4], _para_speed_bias[i][5]);
+        _Bgs[i] = Eigen::Vector3d(_para_speed_bias[i][6], _para_speed_bias[i][7], _para_speed_bias[i][8]);
+    }
+
+    for(int i = 0; i < svar.GetInt("camera_number", 1); ++i){
+        _tic[i] = Eigen::Vector3d(_para_ex_pose[i][0], _para_ex_pose[i][1], _para_ex_pose[i][2]);
+        _ric[i] = Eigen::Quaterniond(_para_ex_pose[i][6], _para_ex_pose[i][3], _para_ex_pose[i][4], _para_ex_pose[i][5]).toRotationMatrix();
+    }
+
+    Eigen::VectorXd dep = _feature_manager.GetDepthVector();
+    for(int i = 0; i < _feature_manager.GetFeatureCount(); ++i)
+        dep(i) = _para_feature[i][0];
+    _feature_manager.SetDepth(dep);
+    if (svar.GetInt("estimate_td"))
+        _td = _para_td[0][0];
+
+    if (_relocalization_info){
+
+    }
+}
+
+bool Estimator::FailureDetection()
+{
+    if (_feature_manager._last_track_num < 2){
+        LOG(INFO) << "little feature: " << _feature_manager._last_track_num;
+        return true;
+    }
+    if(_Bas[svar.GetInt("window_size")].norm() > 2.5){
+        LOG(INFO) << "big IMU acc bias estimation: " << _Bas[svar.GetInt("window_size")].norm();
+        return true;
+    }
+    if(_Bgs[svar.GetInt("window_size")].norm() > 1.0){
+        LOG(INFO) << "big IMU gyr bias estimation: " << _Bgs[svar.GetInt("window_size")].norm();
+        return true;
+    }
+
+    Eigen::Vector3d tmp_P = _Ps[svar.GetInt("window_size")];
+    if ((tmp_P - _lastP).norm() > 5){
+        LOG(INFO) << "big translation";
+        return true;
+    }
+    if (abs(tmp_P.z() - _lastP.z()) > 1){
+        LOG(INFO) << "big z translation";
+        return true;
+    }
+
+    Eigen::Matrix3d tmp_R = _Rs[svar.GetInt("window_size")];
+    Eigen::Matrix3d delta_R = tmp_R.transpose() * _lastR;
+    Eigen::Quaterniond delta_Q(delta_R);
+    // FIXME: 为什么要乘2
+    double delta_angle = acos(delta_Q.w()) * 2.0 / 3.14 * 180.0;
+    if (delta_angle > 50){
+        LOG(INFO) << "big delta_angle";
+        return true;
+    }
+
+    return false;
 }

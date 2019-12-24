@@ -83,6 +83,8 @@ public:
     void RemoveBackShiftDepth(Eigen::Matrix3d &marg_R, Eigen::Vector3d &marg_P, Eigen::Matrix3d &new_R, Eigen::Vector3d& new_P);
     void RemoveBack();
     void RemoveFront(int frame_count);
+    void SetDepth(const Eigen::VectorXd &x);
+    void RemoveFailures();
 
 private:
     double CompensatedParallax(const FeaturePerId &it_per_id, int frame_count);
