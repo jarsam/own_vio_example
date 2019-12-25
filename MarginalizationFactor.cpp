@@ -175,7 +175,10 @@ void MarginalizationInfo::Marginalize()
     Eigen::VectorXd S_sqrt = S.cwiseSqrt();
     Eigen::VectorXd S_inv_sqrt = S_inv.cwiseSqrt();
     // FIXME: 下面这两个是干嘛的?
-    _linearized_jacobians = S_sqrt.asDiagonal() * saes2.eigenvalues().transpose();
+    // 这个是用FEJ的思想, 使用第一次得到的雅克比.
+    // Hx = b 分解乘 J^TJx = J^Tb 的形式, 运用了特征值分解的方法
+    // _linearized_jacobians就是J, _linearized_residuals就是b了.
+    _linearized_jacobians = S_sqrt.asDiagonal() * saes2.eigenvectors().transpose();
     _linearized_residuals = S_inv_sqrt.asDiagonal() * saes2.eigenvectors().transpose() * b;
 }
 
@@ -224,6 +227,10 @@ bool MarginalizationFactor::Evaluate(double const *const *parameters, double *re
             }
         }
     }
+
+    // 上一次边缘化之前, 优化之后的残差, 舒尔补之后的残差已经是最小二乘结果了, 它反馈到自变量上是接近于0(因为各个方向的量都抵消了)
+    // 所以, 这个时候如果对自变量调整了dx, 则与之前的舒尔补后的值的残差会增加J*dx.
+    // 所以这里要表示的不仅仅是与之前先验值的差, 而是要表示在之前的误差上面叠加起来的误差. 因为之前的误差是最小二乘结果, 而不是全零.
     Eigen::Map<Eigen::VectorXd>(residuals, n) = _marginalization_info->_linearized_residuals +
         _marginalization_info->_linearized_jacobians * dx;
     if(jacobians){

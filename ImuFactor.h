@@ -36,7 +36,11 @@ public:
         Eigen::Vector3d   Bgj(parameters[3][6], parameters[3][7], parameters[3][8]);
 
         Eigen::Map<Eigen::Matrix<double, 15, 1> > residual(residuals);
-        // 在优化迭代的过程中, 预积分值是不变的, 输入的状态值会被不断的更新, 然后不断的调用Evaluate()计算更新后的Imu残差.
+        // 在优化迭代的过程中, 都会用最新的bias减去之前的bias, 用这个差重新计算两帧之间的预积分值.
+        // 又因为先前预积分的时候已经算好了预积分值相当于bias的导数, 所以这里直接用bias乘以导数, 就能够调节预积分的值.
+        // 明明已经有了预积分关于bias的雅克比了，为什么这里要这样子把bias单独拿出来算新的预积分，而不是bias和预积分一起直接优化呢？
+        // 每迭代一次都要调整一次，为什么不多优化几次，最后再累加呢？
+        // 这是因为如果新的bias与旧的bias相差较大的时候, 就不能用之前的预积分相对于bias的雅克比了, 需要调用repropagate()函数.
         residual = _pre_integration->Evaluate(Pi, Qi, Vi, Bai, Bgi,
                                               Pj, Qj, Vj, Baj, Bgj);
         Eigen::Matrix<double, 15, 15> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 15, 15> >(

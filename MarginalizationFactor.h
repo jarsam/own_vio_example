@@ -74,6 +74,7 @@ public:
 
     const double _eps = 1e-8;
 
+    // 先验值的雅克比
     Eigen::MatrixXd _linearized_jacobians;
     Eigen::VectorXd _linearized_residuals;
 

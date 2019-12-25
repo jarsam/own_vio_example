@@ -151,6 +151,7 @@ void FeatureManager::Triangulate(std::vector<Eigen::Vector3d> &Ps, std::vector<E
         if(!(it_per_id._used_num >= 2 && it_per_id._start_frame < svar.GetInt("window_size", 20) - 2))
             continue;
         // 该id的特征点深度值大于0, 该值初始化的时候为-1, 如果大于0, 则说明该点被三角化过.
+        // FIXME: 这里应该可以继续三角化减少误差..
         if(it_per_id._estimated_depth > 0)
             continue;
 
