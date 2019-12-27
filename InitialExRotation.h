@@ -29,9 +29,9 @@ private:
 
 private:
     int _frame_count;
-    // _Rc代表的是相机的旋转
+    // _Rc代表的是相机两两帧的旋转
     std::vector<Eigen::Matrix3d> _Rc;
-    // _Rimu代表的是Imu的旋转
+    // _Rimu代表的是Imu两两帧之间的预积分的旋转
     std::vector<Eigen::Matrix3d> _Rimu;
     // 由_ric和Imu信息算出的两帧之间旋转.
     std::vector<Eigen::Matrix3d> _Rc_g;

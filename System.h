@@ -71,7 +71,7 @@ private:
 
     double _last_imu_time;
     // imu中的时间
-    double _imu_current_time;
+    double _imu_current_time = -1.0;
 
     //
     std::mutex _feature_buf_mutex;

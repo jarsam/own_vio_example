@@ -58,13 +58,14 @@ bool InitialSfM::Construct(int frame_num, std::vector<Eigen::Quaterniond> &q, st
     }
 
     // 遍历(l+1)帧到(frame_num-2)帧,寻找到第l帧的匹配,三角化更多的地图点.
-    for(int i = l + 1; i < frame_num; ++i)
+    for(int i = l + 1; i < frame_num - 1; ++i)
         TriangulateTwoFrames(l, pose[l], i, pose[i], sfm_feature);
 
     // 遍历第l-1帧到第0帧,先通过pnp计算第i帧的位姿,再三角化一些特征点.
     for(int i = l - 1; i >= 0; --i){
         Eigen::Matrix3d initial_r = cam_rotation[i + 1];
         Eigen::Vector3d initial_t = cam_translation[i + 1];
+        // FIXME: 如果i!=0的话, 这个地方很难满足, 一旦有一帧不满足就直接挂了, 感觉有问题.
         if (!SolveFrameByPnP(initial_r, initial_t, i, sfm_feature))
             return false;
         cam_rotation[i] = initial_r;
@@ -119,7 +120,7 @@ bool InitialSfM::Construct(int frame_num, std::vector<Eigen::Quaterniond> &q, st
     for(int i = 0; i < _feature_num; ++i){
         if(sfm_feature[i]._state != true)
             continue;
-        for(int j = 0; j < sfm_feature[i]._observation.size(); ++i){
+        for(int j = 0; j < sfm_feature[i]._observation.size(); ++j){
             int l = sfm_feature[i]._observation[j].first;
             ceres::CostFunction* cost_function = ReprojectionError3D::Create(
                 sfm_feature[i]._observation[j].second.x(),
@@ -133,6 +134,7 @@ bool InitialSfM::Construct(int frame_num, std::vector<Eigen::Quaterniond> &q, st
     options.max_solver_time_in_seconds = 0.2;
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
+    std::cout << summary.FullReport();
 
     if (summary.termination_type == ceres::CONVERGENCE || summary.final_cost < 5e-03)
     {
@@ -140,7 +142,7 @@ bool InitialSfM::Construct(int frame_num, std::vector<Eigen::Quaterniond> &q, st
     }
     else
     {
-        //cout << "vision only BA not converge " << endl;
+        std::cout << "vision only BA not converge " << std::endl;
         return false;
     }
     // 从世界坐标系转为局部坐标系了.
@@ -221,8 +223,8 @@ void InitialSfM::TriangulatePoint(Eigen::Matrix<double, 3, 4> &pose0, Eigen::Mat
     Eigen::Matrix4d design_matrix = Eigen::Matrix4d::Zero();
     design_matrix.row(0) = point0[0] * pose0.row(2) - pose0.row(0);
     design_matrix.row(1) = point0[1] * pose0.row(2) - pose0.row(1);
-    design_matrix.row(2) = point1[0] * pose0.row(2) - pose0.row(0);
-    design_matrix.row(3) = point1[1] * pose0.row(2) - pose0.row(1);
+    design_matrix.row(2) = point1[0] * pose1.row(2) - pose1.row(0);
+    design_matrix.row(3) = point1[1] * pose1.row(2) - pose1.row(1);
 
     Eigen::Vector4d triangulated_point;
     triangulated_point =

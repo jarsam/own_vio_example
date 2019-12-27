@@ -28,7 +28,7 @@ void System::ReadParameters()
         return;
     }
 
-    std::vector<double> Tic;
+    cv::Mat Tic;
 
     camera_setting["intrinsics"] >> para._camera_intrinsics;
     camera_setting["distortion_coefficients"] >> para._distortion_coefficients;
@@ -39,6 +39,15 @@ void System::ReadParameters()
     para._acc_random = imu_setting["accelerometer_random_walk"];
     para._gyr_noise = imu_setting["gyroscope_noise_density"];
     para._gyr_random = imu_setting["gyroscope_random_walk"];
+
+    if (svar.GetInt("estimate_extrinsic", 2) == 1){
+        camera_setting["T_BS"] >> Tic;
+
+        para._Tic(0) = Tic.at<double>(0, 3); para._Tic(1) = Tic.at<double>(1, 3); para._Tic(2) = Tic.at<double>(2, 3);
+        para._Ric(0, 0) = Tic.at<double>(0, 0); para._Ric(0, 1) = Tic.at<double>(0, 1); para._Ric(0, 2) = Tic.at<double>(0, 2);
+        para._Ric(1, 0) = Tic.at<double>(1, 0); para._Ric(1, 1) = Tic.at<double>(1, 1); para._Ric(1, 2) = Tic.at<double>(1, 2);
+        para._Ric(2, 0) = Tic.at<double>(2, 0); para._Ric(2, 1) = Tic.at<double>(2, 1); para._Ric(2, 2) = Tic.at<double>(2, 2);
+    }
 }
 
 bool System::PubImuData()
@@ -302,7 +311,7 @@ void System::ProcessBackEnd()
             return (measurements = GetMeasurements()).size() != 0;
         });
         if (measurements.size() > 0){
-            std::cout << "GetMeasurement size: " << measurements.size();
+            std::cout << "GetMeasurement size: " << measurements.size() << std::endl;
         }
         lk.unlock();
         _estimator_mutex.lock();

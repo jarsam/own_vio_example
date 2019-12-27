@@ -26,6 +26,8 @@ void Estimator::ProcessIMU(double dt, const Eigen::Vector3d &linear_acceleration
     }
     // 当滑窗不满的时候,把当前测量值加入到滑窗指定位置,所以在这个阶段做预积分的时候相当于是在和自己做预积分
     // 在第一帧的时候会有很多Imu信息,这里加入的是最开始的Imu信息.
+    // 注意, 这里只加入一帧Imu信息, 而一帧图像会有很多Imu信息.
+    // 也就是说这里只有一个_pre_integrations[0]只有一个Imu信息, 且不会进行预积分过程.
     if(!_pre_integrations[_frame_count])
         _pre_integrations[_frame_count] = std::shared_ptr<IntegrationBase>(new IntegrationBase(_acc0, _gyr0, _Bas[_frame_count], _Bgs[_frame_count]));
     // 进入预积分阶段
@@ -68,8 +70,13 @@ void Estimator::ProcessImage(const std::map<int, std::vector<std::pair<int, Eige
     ImageFrame image_frame(image, header);
     image_frame._pre_integration = _tmp_pre_integration;
     // 每读取一帧图像特征点数据,都会存入_all_image_frame
+    // 第一帧, 也就是frame_count=0时候的帧的_pre_integration 是NULL的
+    // 之后的每一帧都是当前帧预积分好的这一帧内的旋转, 位移和速度变化.
     _all_image_frame.insert(std::make_pair(header, image_frame));
-    // 每读取一帧新的图像都会new一个_tmp_pre_integration.
+
+    // FIXME: 但是这个_tmp_pre_integration好像没有传入image_frame中.
+    // 这个时候的初始化的意思就是开始下一帧的预积分了.
+    // 这一帧的最后一个Imu信息作为初始值.
     _tmp_pre_integration = std::shared_ptr<IntegrationBase>(new IntegrationBase(_acc0, _gyr0, _Bas[_frame_count], _Bgs[_frame_count]));
 
     // 相机和IMU之间的相对旋转
@@ -186,8 +193,9 @@ bool Estimator::InitialStructure()
     Eigen::Matrix3d relative_R;
     Eigen::Vector3d relative_T;
     int l;
+    // 这个函数中做的工作就是在滑动窗口中找出一帧和最后一帧有一定视差的关键帧
     if (!RelativePose(relative_R, relative_T, l)){
-        LOG(INFO) << "RelativePose Failed";
+        LOG(INFO) << "Not enough features or parallax; Move device around.";
         return false;
     }
 

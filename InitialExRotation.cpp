@@ -13,6 +13,8 @@ InitialExRotation::InitialExRotation()
     _ric = Eigen::Matrix3d::Identity();
 }
 
+// 通过两两帧之间预积分出来的旋转矩阵和视觉测量出来的矩阵乘以Imu到相机的旋转矩阵应该相等的思想算出Imu和相机之间的旋转矩阵
+// FIXME: 这个方法没想象中那么好, 例如MH_05数据集, 要在很多帧之后才能初始化成功.
 bool InitialExRotation::CalibrationExRotation(std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> &corres,
                                               Eigen::Quaterniond &delta_q_imu, Eigen::Matrix3d &calib_ric_result)
 {
