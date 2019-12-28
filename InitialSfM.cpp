@@ -134,11 +134,11 @@ bool InitialSfM::Construct(int frame_num, std::vector<Eigen::Quaterniond> &q, st
     options.max_solver_time_in_seconds = 0.2;
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
-    std::cout << summary.FullReport();
+//    std::cout << summary.FullReport();
 
     if (summary.termination_type == ceres::CONVERGENCE || summary.final_cost < 5e-03)
     {
-        //cout << "vision only BA converge" << endl;
+        std::cout << "vision only BA converge" << std::endl;
     }
     else
     {

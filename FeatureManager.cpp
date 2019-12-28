@@ -60,7 +60,8 @@ bool FeatureManager::AddFeatureCheckParallax(int frame_count,
         return true;
     // 平均视差要大于某个阈值,这里取10个像素点.
     else
-        return parallax_sum / parallax_num >= svar.GetDouble("min_parallax", 10);
+        return parallax_sum / parallax_num >=
+            svar.GetDouble("min_parallax", 10) / (2 * (para._camera_intrinsics[0] + para._camera_intrinsics[1]));
 }
 
 // 这个函数实际上是求取该特征点在两帧的归一化平面上的坐标点的距离
@@ -69,8 +70,8 @@ double FeatureManager::CompensatedParallax(const FeaturePerId &it_per_id, int fr
     const FeaturePerFrame &frame_i = it_per_id._feature_per_frame[frame_count - 2 - it_per_id._start_frame];
     const FeaturePerFrame &frame_j = it_per_id._feature_per_frame[frame_count - 1 - it_per_id._start_frame];
 
-    Eigen::Vector3d p_j = frame_j._point;
     Eigen::Vector3d p_i = frame_i._point;
+    Eigen::Vector3d p_j = frame_j._point;
 
     double u_j = p_j(0);
     double v_j = p_j(1);

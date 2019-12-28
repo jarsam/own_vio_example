@@ -61,9 +61,12 @@ private:
             for(int i = 0; i < _cur_pts.size(); ++i){
                 Eigen::Vector3d tem_pt;
                 // 首先去畸变,然后用fundamental矩阵进行RANSAC.
+                // FIXME: 感觉这里的去畸变存在问题
                 _pinhole_camera.LiftProjective(Eigen::Vector2d(_cur_pts[i].x, _cur_pts[i].y), tem_pt);
                 tem_pt.x() = para._camera_intrinsics[0] * tem_pt.x() + para._camera_intrinsics[2];
                 tem_pt.y() = para._camera_intrinsics[1] * tem_pt.y() + para._camera_intrinsics[3];
+//                tem_pt.x() = para._camera_intrinsics[0] * tem_pt.x() + para._width / 2;
+//                tem_pt.y() = para._camera_intrinsics[1] * tem_pt.y() + para._height / 2;
                 un_cur_pts[i] = cv::Point2f(tem_pt.x(), tem_pt.y());
 
 //                LOG(INFO) << "pre_pt: " << _cur_pts[i];
@@ -71,6 +74,8 @@ private:
                 _pinhole_camera.LiftProjective(Eigen::Vector2d(_forw_pts[i].x, _forw_pts[i].y), tem_pt);
                 tem_pt.x() = para._camera_intrinsics[0] * tem_pt.x() + para._camera_intrinsics[2];
                 tem_pt.y() = para._camera_intrinsics[1] * tem_pt.y() + para._camera_intrinsics[3];
+//                tem_pt.x() = para._camera_intrinsics[0] * tem_pt.x() + para._width / 2;
+//                tem_pt.y() = para._camera_intrinsics[1] * tem_pt.y() + para._height / 2;
                 un_forw_pts[i] = cv::Point2f(tem_pt.x(), tem_pt.y());
             }
 

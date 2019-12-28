@@ -80,12 +80,14 @@ private:
         _para_td.resize(1, std::vector<double>(1, 0));
         _para_tr.resize(1, std::vector<double>(1, 0));
 
+        _tmp_pre_integration = nullptr;
         for(int i = 0; i < svar.GetInt("window_size", 20) + 1; ++i){
             _Rs[i].setIdentity();
             _Ps[i].setZero();
             _Vs[i].setZero();
             _Bas[i].setZero();
             _Bgs[i].setZero();
+            _pre_integrations[i] = nullptr;
         }
 
         for(auto &it: _all_image_frame){

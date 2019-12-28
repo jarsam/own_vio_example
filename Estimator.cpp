@@ -218,7 +218,7 @@ bool Estimator::InitialStructure()
         if(frame_it->first == _headers[i]){
             frame_it->second._keyframe_flag = true;
             // 现在是第l帧到Imu的旋转
-            frame_it->second._R = Q[i].toRotationMatrix() * _ric[0].transpose();
+            frame_it->second._R = Q[i].toRotationMatrix() * para._Ric.transpose();
             frame_it->second._T = T[i];
             i++;
             continue;
@@ -257,6 +257,7 @@ bool Estimator::InitialStructure()
         }
 
         // FIXME: 感觉之前的帧如果不能跟踪到就一直不能跟踪了啊..这不就直接GG了吗
+        // 这个情况下失败的话就会一直失败, 但是这种失败条件很难
         if(pts_3_vector.size() < 6){
             std::cout << "pts_3_vector size: " << pts_3_vector.size() << std::endl;
             return false;
@@ -326,6 +327,8 @@ bool Estimator::VisualInitialAlign()
     bool result = VisualImuAlignment(_all_image_frame, _Bgs, _g, x);
     if (!result){
         LOG(ERROR) << "solve g failed!";
+        for(int i = 0; i < _Bgs.size(); ++i)
+            _Bgs[i].setZero();
         return false;
     }
 
@@ -606,22 +609,22 @@ void Estimator::BackendOptimization()
         }
     }
 
-    if (_relocalization_info){
-        std::shared_ptr<ceres::LocalParameterization> local_parameterization =
-            std::shared_ptr<ceres::LocalParameterization>(new PoseLocalParameterization());
-        problem.AddParameterBlock(_relo_pose.data(), POSE_SIZE, local_parameterization.get());
-        int retrive_feature_index = 0;
-        int feature_index = -1;
-        for(auto &it_per_id: _feature_manager._feature){
-            it_per_id._used_num = it_per_id._feature_per_frame.size();
-            if (!(it_per_id._used_num >= 2 && it_per_id._start_frame < svar.GetInt("window_size", 20) - 2))
-                continue;
-            ++feature_index;
-            int start = it_per_id._start_frame;
-            if (start <= _relo_frame_local_index){
-            }
-        }
-    }
+//    if (_relocalization_info){
+//        std::shared_ptr<ceres::LocalParameterization> local_parameterization =
+//            std::shared_ptr<ceres::LocalParameterization>(new PoseLocalParameterization());
+//        problem.AddParameterBlock(_relo_pose.data(), POSE_SIZE, local_parameterization.get());
+//        int retrive_feature_index = 0;
+//        int feature_index = -1;
+//        for(auto &it_per_id: _feature_manager._feature){
+//            it_per_id._used_num = it_per_id._feature_per_frame.size();
+//            if (!(it_per_id._used_num >= 2 && it_per_id._start_frame < svar.GetInt("window_size", 20) - 2))
+//                continue;
+//            ++feature_index;
+//            int start = it_per_id._start_frame;
+//            if (start <= _relo_frame_local_index){
+//            }
+//        }
+//    }
 
     ceres::Solver::Options options;
     options.linear_solver_type = ceres::DENSE_SCHUR;

@@ -310,9 +310,9 @@ void System::ProcessBackEnd()
         _con.wait(lk, [&]{
             return (measurements = GetMeasurements()).size() != 0;
         });
-        if (measurements.size() > 0){
-            std::cout << "GetMeasurement size: " << measurements.size() << std::endl;
-        }
+//        if (measurements.size() > 0){
+//            std::cout << "GetMeasurement size: " << measurements.size() << std::endl;
+//        }
         lk.unlock();
         _estimator_mutex.lock();
         for(auto &measurement: measurements){

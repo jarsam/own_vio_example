@@ -78,7 +78,7 @@ public:
             Propagate(_dt_buf[i], _acc_buf[i], _gyr_buf[i]);
     }
 
-    void MidPointIntegration(double dt, const Eigen::Vector3d &acc0, const Eigen::Vector3d gyr0,
+    void MidPointIntegration(double dt, const Eigen::Vector3d &acc0, const Eigen::Vector3d &gyr0,
                              const Eigen::Vector3d &acc1, const Eigen::Vector3d &gyr1,
                              const Eigen::Vector3d &delta_p, const Eigen::Quaterniond &delta_q, const Eigen::Vector3d &delta_v,
                              const Eigen::Vector3d &linearized_ba, const Eigen::Vector3d &linearized_bg,

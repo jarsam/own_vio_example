@@ -24,14 +24,15 @@ void SolveGyroscopeBias(std::map<double, ImageFrame> &all_image_frame, std::vect
         Eigen::Quaterniond q_ij(frame_i->second._R.transpose() * frame_j->second._R);
         tmp_A = frame_j->second._pre_integration->_jacobian.template block<3, 3>(O_R, O_BG);
         tmp_b = 2 * (frame_j->second._pre_integration->_delta_q.inverse() * q_ij).vec();
-
+        
         A += tmp_A.transpose() * tmp_A;
         b += tmp_A.transpose() * tmp_b;
     }
 
     // 这里本质上是一个最小二乘问题,如果没有预积分,则需要用ceres进行优化.
     Eigen::Vector3d delta_bg = A.ldlt().solve(b);
-    // 这里求出来的只是Bias的变化量,所以要进行累加.
+    // _Bgs的值本来就是0.
+    // FIXME: 但是如果后面初始化失败了, _Bgs不是错误赋值了吗?
     for(int i = 0; i <= svar.GetInt("window_size", 20); ++i)
         Bgs[i] += delta_bg;
     // 同时利用新的Bias重新repropagate
@@ -156,13 +157,14 @@ bool LinearAlignment(std::map<double, ImageFrame> &all_image_frame, Eigen::Vecto
         // 比如: 速度, 尺度和重力向量.
         tmp_A.block<3, 3>(0, 0) = -dt * Eigen::Matrix3d::Identity();
         tmp_A.block<3, 3>(0, 6) = frame_i->second._R.transpose() * dt * dt / 2 * Eigen::Matrix3d::Identity();
+        // 这里除了100, 所以优化后的尺度也要除以100, 这样是为了让尺度的精度更高.
         tmp_A.block<3, 1>(0, 9) = frame_i->second._R.transpose() * (frame_j->second._T - frame_i->second._T) / 100.0;
         tmp_b.block<3, 1>(0, 0) = frame_j->second._pre_integration->_delta_p + frame_i->second._R.transpose() * frame_j->second._R * para._Tic - para._Tic;
 
         tmp_A.block<3, 3>(3, 0) = -Eigen::Matrix3d::Identity();
         tmp_A.block<3, 3>(3, 3) = frame_i->second._R.transpose() * frame_j->second._R;
         tmp_A.block<3, 3>(3, 6) = frame_i->second._R.transpose() * dt * Eigen::Matrix3d::Identity();
-        tmp_A.block<3, 1>(3, 0) = frame_j->second._pre_integration->_delta_v;
+        tmp_b.block<3, 1>(3, 0) = frame_j->second._pre_integration->_delta_v;
 
         // FIXME: 这里本来不应该为单位阵的,有改进的空间.
         Eigen::Matrix<double, 6, 6> con_inv = Eigen::Matrix<double, 6, 6>::Identity();
