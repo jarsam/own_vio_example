@@ -18,15 +18,15 @@
 class ResidualBlockInfo
 {
 public:
-    ResidualBlockInfo(std::shared_ptr<ceres::CostFunction> cost_function, std::shared_ptr<ceres::LossFunction> loss_function,
+    ResidualBlockInfo(ceres::CostFunction* cost_function, ceres::LossFunction* loss_function,
                       std::vector<double *> parameter_block, std::vector<int> drop_set) :
                       _cost_function(cost_function), _loss_function(loss_function),
                       _parameter_blocks(parameter_block), _drop_set(drop_set){}
 
     void Evaluate();
 
-    std::shared_ptr<ceres::CostFunction> _cost_function;
-    std::shared_ptr<ceres::LossFunction> _loss_function;
+    ceres::CostFunction* _cost_function;
+    ceres::LossFunction* _loss_function;
     std::vector<double*> _parameter_blocks;// 传入的参数
     std::vector<int> _drop_set;// 待marg的优化变量id
 
@@ -41,7 +41,7 @@ public:
 
 struct ThreadStruct
 {
-    std::vector<std::shared_ptr<ResidualBlockInfo> > _sub_factors;
+    std::vector<ResidualBlockInfo* > _sub_factors;
     Eigen::MatrixXd _A;
     Eigen::VectorXd _b;
     std::unordered_map<long, int> _parameter_block_size;
@@ -56,12 +56,12 @@ public:
     int LocalSize(int size) const{
         return size == 7 ? 6 : size;
     }
-    void AddResidualBlockInfo(std::shared_ptr<ResidualBlockInfo> residual_block_info);
+    void AddResidualBlockInfo(ResidualBlockInfo* residual_block_info);
     void PreMarginalize();
     void Marginalize();
-    std::vector<double *> GetParameterBlocks(std::unordered_map<long, std::vector<double> > &addr_shift);
+    std::vector<double *> GetParameterBlocks(std::unordered_map<long, double * > &addr_shift);
 
-    std::vector<std::shared_ptr<ResidualBlockInfo> > _factors;
+    std::vector<ResidualBlockInfo* > _factors;
     // _m为要margin掉的变量个数,也就是parameter_block_idx的总localSize, 以double为单位, VBias为9, PQ为6
     // _n为要保留下的优化变量的变量个数, n=localSize(parameter_block_size) - m
     int _m, _n;
@@ -88,11 +88,11 @@ public:
 class MarginalizationFactor: public ceres::CostFunction
 {
 public:
-    MarginalizationFactor(std::shared_ptr<MarginalizationInfo> marginalization_info);
+    MarginalizationFactor(MarginalizationInfo* marginalization_info);
     virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians)const;
 
     // 这个_marginalization_info是上一次的边缘化信息
-    std::shared_ptr<MarginalizationInfo> _marginalization_info;
+    MarginalizationInfo* _marginalization_info;
 };
 
 

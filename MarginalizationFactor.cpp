@@ -4,7 +4,7 @@
 
 #include "MarginalizationFactor.h"
 
-MarginalizationFactor::MarginalizationFactor(std::shared_ptr<MarginalizationInfo> marginalization_info)
+MarginalizationFactor::MarginalizationFactor(MarginalizationInfo* marginalization_info)
 : _marginalization_info(marginalization_info)
 {
     int cnt = 0;
@@ -41,10 +41,13 @@ MarginalizationInfo::~MarginalizationInfo()
 
     for(int i = 0; i < _factors.size(); ++i){
         delete[] _factors[i]->_raw_jacobians;
+        delete _factors[i]->_cost_function;
+        delete _factors[i]->_loss_function;
+        delete _factors[i];
     }
 }
 
-void MarginalizationInfo::AddResidualBlockInfo(std::shared_ptr<ResidualBlockInfo> residual_block_info)
+void MarginalizationInfo::AddResidualBlockInfo(ResidualBlockInfo* residual_block_info)
 {
     _factors.emplace_back(residual_block_info);
     std::vector<double *> &parameter_blocks = residual_block_info->_parameter_blocks;
@@ -183,7 +186,7 @@ void MarginalizationInfo::Marginalize()
 }
 
 std::vector<double *> MarginalizationInfo::GetParameterBlocks(
-    std::unordered_map<long, std::vector<double> > &addr_shift)
+    std::unordered_map<long, double * > &addr_shift)
 {
     std::vector<double *> keep_block_addr;
     _keep_block_size.clear();
@@ -195,7 +198,7 @@ std::vector<double *> MarginalizationInfo::GetParameterBlocks(
             _keep_block_size.emplace_back(_parameter_block_size[it.first]);
             _keep_block_idx.emplace_back(_parameter_block_idx[it.first]);
             _keep_block_data.emplace_back(_parameter_block_data[it.first]);
-            keep_block_addr.emplace_back(addr_shift[it.first].data());
+            keep_block_addr.emplace_back(addr_shift[it.first]);
         }
     }
 

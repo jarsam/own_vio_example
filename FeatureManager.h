@@ -93,7 +93,8 @@ public:
     int _last_track_num;
 
     std::list<FeaturePerId> _feature;
-    std::vector<Eigen::Matrix3d> _R;
+    // 直接指向Estimator中的R
+    Eigen::Matrix3d *_R;
     std::vector<Eigen::Matrix3d> _ric;
 };
 

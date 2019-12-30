@@ -4,7 +4,7 @@
 
 #include "FeatureManager.h"
 
-FeatureManager::FeatureManager(std::vector<Eigen::Matrix3d> &Rs): _R(Rs)
+FeatureManager::FeatureManager(std::vector<Eigen::Matrix3d> &Rs): _R(Rs.data())
 {
     for(int i = 0; i < svar.GetInt("camera_number", 1); ++i)
         _ric.emplace_back(Eigen::Matrix3d::Identity());
@@ -61,7 +61,7 @@ bool FeatureManager::AddFeatureCheckParallax(int frame_count,
     // 平均视差要大于某个阈值,这里取10个像素点.
     else
         return parallax_sum / parallax_num >=
-            svar.GetDouble("min_parallax", 10) / (2 * (para._camera_intrinsics[0] + para._camera_intrinsics[1]));
+            2 * svar.GetDouble("min_parallax", 10) / ((para._camera_intrinsics[0] + para._camera_intrinsics[1]));
 }
 
 // 这个函数实际上是求取该特征点在两帧的归一化平面上的坐标点的距离
@@ -111,7 +111,7 @@ Eigen::VectorXd FeatureManager::GetDepthVector()
     int feature_index = -1;
     for(auto &it_per_id: _feature){
         it_per_id._used_num = it_per_id._feature_per_frame.size();
-        if (it_per_id._used_num >= 2 && it_per_id._start_frame < svar.GetInt("window_size", 20) - 2)
+        if (!(it_per_id._used_num >= 2 && it_per_id._start_frame < svar.GetInt("window_size", 20) - 2))
             continue;
         dep_vec(++feature_index) = 1. / it_per_id._estimated_depth;
     }

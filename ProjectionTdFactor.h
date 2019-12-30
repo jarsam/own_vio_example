@@ -27,8 +27,8 @@ public:
         _velocity_j.y() = velocity_j.y();
         _velocity_j.z() = 0;
 
-        _row_i = row_i - para._camera_intrinsics[3];
-        _row_j = row_j - para._camera_intrinsics[3];
+        _row_i = row_i - para._height / 2;
+        _row_j = row_j - para._height / 2;
     }
 
     bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const

@@ -40,6 +40,31 @@ public:
     Estimator(){
         ClearState();
     }
+    ~Estimator(){
+        for(int i = 0; i < svar.GetInt("window_size") + 1; ++i)
+            delete[] _para_pose[i];
+        delete _para_pose;
+
+        for(int i = 0; i < svar.GetInt("window_size") + 1; ++i)
+            delete[] _para_speed_bias[i];
+        delete _para_speed_bias;
+
+        for(int i = 0; i < svar.GetInt("feature_number"); ++i)
+            delete[] _para_feature[i];
+        delete _para_feature;
+
+        for(int i = 0; i < svar.GetInt("camera_number"); ++i)
+            delete[] _para_ex_pose[i];
+        delete _para_ex_pose;
+
+        delete[] _para_retrive_pose;
+
+        delete[] _para_td[0];
+        delete _para_td;
+
+        delete[] _para_tr[0];
+        delete _para_tr;
+    }
     void ProcessIMU(double dt, const Eigen::Vector3d &linear_acceleration, const Eigen::Vector3d &angular_velocity);
     void ProcessImage(const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double header);
 
@@ -71,14 +96,38 @@ private:
         _ric.resize(svar.GetInt("camera_number", 1), Eigen::Matrix3d::Zero());
         _tic.resize(svar.GetInt("camera_number", 1), Eigen::Vector3d::Zero());
 
-        _para_pose.resize(svar.GetInt("window_size", 20) + 1, std::vector<double>(POSE_SIZE, 0));
-        _para_speed_bias.resize(svar.GetInt("window_size", 20) + 1, std::vector<double>(SPEED_BIAS, 0));
-        _para_feature.resize(svar.GetInt("feature_number", 1000), std::vector<double>(FEATURE_SIZE, 0));
-        _para_ex_pose.resize(svar.GetInt("camera_number", 1), std::vector<double>(POSE_SIZE, 0));
-        _para_retrive_pose.resize(POSE_SIZE, 0.0);
-        _relo_pose.resize(POSE_SIZE, 0.0);
-        _para_td.resize(1, std::vector<double>(1, 0));
-        _para_tr.resize(1, std::vector<double>(1, 0));
+//        _para_pose.resize(svar.GetInt("window_size", 20) + 1, std::vector<double>(POSE_SIZE, 0));
+//        _para_speed_bias.resize(svar.GetInt("window_size", 20) + 1, std::vector<double>(SPEED_BIAS, 0));
+//        _para_feature.resize(svar.GetInt("feature_number", 1000), std::vector<double>(FEATURE_SIZE, 0));
+//        _para_ex_pose.resize(svar.GetInt("camera_number", 1), std::vector<double>(POSE_SIZE, 0));
+//        _para_retrive_pose.resize(POSE_SIZE, 0.0);
+//        _relo_pose.resize(POSE_SIZE, 0.0);
+//        _para_td.resize(1, std::vector<double>(1, 0));
+//        _para_tr.resize(1, std::vector<double>(1, 0));
+
+        _para_pose = new double*[svar.GetInt("window_size") + 1];
+        for(int i = 0; i < svar.GetInt("window_size") + 1; ++i)
+            _para_pose[i] = new double[POSE_SIZE];
+
+        _para_speed_bias = new double*[svar.GetInt("window_size") + 1];
+        for(int i = 0; i < svar.GetInt("window_size") + 1; ++i)
+            _para_speed_bias[i] = new double[SPEED_BIAS];
+
+        _para_feature = new double*[svar.GetInt("feature_number")];
+        for(int i = 0; i < svar.GetInt("feature_number"); ++i)
+            _para_feature[i] = new double[FEATURE_SIZE];
+
+        _para_ex_pose = new double*[svar.GetInt("camera_number")];
+        for(int i = 0; i < svar.GetInt("camera_number"); ++i)
+            _para_ex_pose[i] = new double[POSE_SIZE];
+
+        _para_retrive_pose = new double[POSE_SIZE];
+
+        _para_td = new double*[1];
+        _para_td[0] = new double[1];
+
+        _para_tr = new double*[1];
+        _para_tr[0] = new double[1];
 
         _tmp_pre_integration = nullptr;
         for(int i = 0; i < svar.GetInt("window_size", 20) + 1; ++i){
@@ -131,14 +180,23 @@ public:
     double _initial_timestamp, _td;
 
     std::vector<double> _headers;
-    std::vector<double> _para_retrive_pose;
     std::vector<double> _relo_pose;
-    std::vector<std::vector<double> > _para_pose;
-    std::vector<std::vector<double> > _para_speed_bias;
-    std::vector<std::vector<double> > _para_feature;
-    std::vector<std::vector<double> > _para_ex_pose;
-    std::vector<std::vector<double> > _para_td;
-    std::vector<std::vector<double> > _para_tr;
+
+//    std::vector<double> _para_retrive_pose;
+//    std::vector<std::vector<double> > _para_pose;
+//    std::vector<std::vector<double> > _para_speed_bias;
+//    std::vector<std::vector<double> > _para_feature;
+//    std::vector<std::vector<double> > _para_ex_pose;
+//    std::vector<std::vector<double> > _para_td;
+//    std::vector<std::vector<double> > _para_tr;
+
+    double** _para_pose;
+    double** _para_speed_bias;
+    double** _para_feature;
+    double** _para_ex_pose;
+    double* _para_retrive_pose;
+    double** _para_td;
+    double** _para_tr;
 
     Eigen::Vector3d _g;
     Eigen::Vector3d _acc0, _gyr0;// 最近一次接收到的Imu数据
@@ -167,7 +225,7 @@ public:
     // 用于在创建ImageFrame对象时,把该指针赋给imageframe.pre_integration.
     std::shared_ptr<IntegrationBase> _tmp_pre_integration;
     // 上一次边缘化的信息.
-    std::shared_ptr<MarginalizationInfo> _last_marginalization_info;
+    MarginalizationInfo* _last_marginalization_info;
     std::vector<double *> _last_marginalization_parameter_blocks;
 
     std::map<double, ImageFrame> _all_image_frame;
