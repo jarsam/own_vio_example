@@ -635,6 +635,7 @@ void Estimator::BackendOptimization()
 
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
+    std::cout << summary.FullReport() << std::endl;
     Double2Vector();
 
     if (_marginalization_flag == MARGIN_OLD){
