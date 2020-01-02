@@ -246,7 +246,7 @@ void FeatureManager::RemoveFront(int frame_count)
             if (it->EndFrame() < frame_count - 1)
                 continue;
             it->_feature_per_frame.erase(it->_feature_per_frame.begin() + j);
-            if (it->_feature_per_frame.size() == 0)
+            if (it->_feature_per_frame.empty())
                 _feature.erase(it);
         }
     }

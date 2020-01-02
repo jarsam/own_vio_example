@@ -25,10 +25,10 @@ void SolveGyroscopeBias(std::map<double, ImageFrame> &all_image_frame, std::vect
         tmp_A = frame_j->second._pre_integration->_jacobian.template block<3, 3>(O_R, O_BG);
         tmp_b = 2 * (frame_j->second._pre_integration->_delta_q.inverse() * q_ij).vec();
 
-        LOG(ERROR) << "tmpA: " << tmp_A;
-        LOG(ERROR) << "delta_q" << frame_j->second._pre_integration->_delta_q.x() << " " << frame_j->second._pre_integration->_delta_q.y()
-            << " " << frame_j->second._pre_integration->_delta_q.z() << " " << frame_j->second._pre_integration->_delta_q.w();
-        LOG(ERROR) << "q_ij" << q_ij.w() << " " << q_ij.x() << " " << q_ij.y() << " " << q_ij.z();
+//        LOG(ERROR) << "tmpA: " << tmp_A;
+//        LOG(ERROR) << "delta_q" << frame_j->second._pre_integration->_delta_q.x() << " " << frame_j->second._pre_integration->_delta_q.y()
+//            << " " << frame_j->second._pre_integration->_delta_q.z() << " " << frame_j->second._pre_integration->_delta_q.w();
+//        LOG(ERROR) << "q_ij" << q_ij.w() << " " << q_ij.x() << " " << q_ij.y() << " " << q_ij.z();
 
         A += tmp_A.transpose() * tmp_A;
         b += tmp_A.transpose() * tmp_b;

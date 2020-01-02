@@ -64,11 +64,11 @@ public:
                 Eigen::Map<Eigen::Matrix<double, 15, 7, Eigen::RowMajor> > jacobian_pose_i(jacobians[0]);
                 jacobian_pose_i.setZero();
                 jacobian_pose_i.block<3, 3>(O_P, O_P) = -Qi.inverse().toRotationMatrix();
+                // FIXME: 这里的G为什么是优化前的量
                 jacobian_pose_i.block<3, 3>(O_P, O_R) =
                     Utility::SkewSymmetric(Qi.inverse() * (0.5 * para._G * sum_dt * sum_dt + Pj - Pi - Vi * sum_dt));
-                jacobian_pose_i.block<3, 3>(O_R, O_R) =
-                    -(Utility::Qleft(Qj.inverse() * Qi) *
-                      Utility::Qright(corrected_delta_q)).bottomRightCorner<3, 3>();
+                jacobian_pose_i.block<3, 3>(O_R, O_R) = -(Utility::Qleft(Qj.inverse() * Qi) *
+                    Utility::Qright(corrected_delta_q)).bottomRightCorner<3, 3>();
                 jacobian_pose_i.block<3, 3>(O_V, O_R) =
                     Utility::SkewSymmetric(Qi.inverse() * (para._G * sum_dt + Vj - Vi));
                 // 注意到这里同样乘了sqrt_info

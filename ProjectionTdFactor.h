@@ -89,6 +89,7 @@ public:
             // 链式求导中视觉误差对第j帧归一化点的求导
             reduce << 1. / dep_j, 0, -pts_camera_j(0) / (dep_j * dep_j),
                 0, 1. / dep_j, -pts_camera_j(1) / (dep_j * dep_j);
+            reduce = _sqrt_info * reduce;
 
             // 链式求导中第j帧归一化点对两个时刻的状态量, 外参以及逆深度求导.
             // jacobians[0]是第j帧归一化点对i时刻的状态量求偏导
@@ -108,7 +109,7 @@ public:
                 Eigen::Map<Eigen::Matrix<double, 2, 7, Eigen::RowMajor> > jacobian_pose_j(jacobians[1]);
                 Eigen::Matrix<double, 3, 6> jaco_j;
                 jaco_j.leftCols<3>() = ric.transpose() * -Rj.transpose();
-                jaco_j.leftCols<3>() = ric.transpose() * Utility::SkewSymmetric(pts_imu_j);
+                jaco_j.rightCols<3>() = ric.transpose() * Utility::SkewSymmetric(pts_imu_j);
 
                 jacobian_pose_j.leftCols<6>() = reduce * jaco_j;
                 jacobian_pose_j.rightCols<1>().setZero();
