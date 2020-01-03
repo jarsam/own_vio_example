@@ -226,6 +226,7 @@ public:
     std::shared_ptr<IntegrationBase> _tmp_pre_integration;
     // 上一次边缘化的信息.
     MarginalizationInfo* _last_marginalization_info;
+    // 之前边缘化的参数块, 已经把要marg 的参数块去除了.
     std::vector<double *> _last_marginalization_parameter_blocks;
 
     std::map<double, ImageFrame> _all_image_frame;

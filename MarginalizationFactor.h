@@ -80,7 +80,7 @@ public:
 
     std::vector<int> _keep_block_size;// 存的是没marg的变量的大小
     std::vector<int> _keep_block_idx;// 存的是没marg的变量的位置
-    std::vector<double *> _keep_block_data; // 存的是没marg的变量的数据
+    std::vector<double *> _keep_block_data; // 存的是没marg的变量的数据, 也是保存的数据
 
     int _sum_block_size;
 };

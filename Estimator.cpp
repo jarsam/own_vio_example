@@ -565,6 +565,9 @@ void Estimator::BackendOptimization()
         int j = i + 1;
         // FIXME: 这里的意思是某个滑动窗口时间太长了, 但是这在实际的SLAM中是有可能的
         // 比如无人机一直待在某个地方不动, 一直Margin Second New
+
+        // 这里是从第1个窗口中直接开始的, 不应该是从第0个窗口开始吗?
+        // 也就是说这里放入的窗口是1-20 而不是0-19.
         if (_pre_integrations[j]->_sum_dt > 10.0)
             continue;
         auto* imu_factor = new ImuFactor(_pre_integrations[j]);
@@ -654,13 +657,14 @@ void Estimator::BackendOptimization()
                 if (_last_marginalization_parameter_blocks[i] == _para_pose[0]
                     || _last_marginalization_parameter_blocks[i] == _para_speed_bias[0])
                     drop_set.emplace_back(i);
-
-                auto* marginalization_factor = new MarginalizationFactor(_last_marginalization_info);
-                auto* residual_block_info = new ResidualBlockInfo(marginalization_factor,
-                    nullptr, _last_marginalization_parameter_blocks,
-                    drop_set);
-                marginalization_info->AddResidualBlockInfo(residual_block_info);
             }
+
+            // 将上一次边缘化的参数块加入到边缘化factor中
+            auto* marginalization_factor = new MarginalizationFactor(_last_marginalization_info);
+            auto* residual_block_info = new ResidualBlockInfo(marginalization_factor,
+                                                              nullptr, _last_marginalization_parameter_blocks,
+                                                              drop_set);
+            marginalization_info->AddResidualBlockInfo(residual_block_info);
         }
         // 添加Imu的先验, 只包含旧帧的Imu测量残差
         {
@@ -735,6 +739,7 @@ void Estimator::BackendOptimization()
         marginalization_info->Marginalize();
 
         // FIXME: 为什么是向右移位, 并且没保留逆深度的状态量
+        // 这里让第i位指向i-1位就意味着抛弃了第0个的状态量.
         std::unordered_map<long, double * > addr_shift;
         for(int i = 1; i <= svar.GetInt("window_size", 20); ++i){
             addr_shift[reinterpret_cast<long>(_para_pose[i])] = _para_pose[i - 1];
@@ -777,7 +782,6 @@ void Estimator::BackendOptimization()
             marginalization_info->PreMarginalize();
             marginalization_info->Marginalize();
 
-            // FIXME: 感觉把第二十帧的给marg了.
             std::unordered_map<long, double *> addr_shift;
             for(int i = 0; i <= svar.GetInt("window_size", 20); ++i){
                 if (i == svar.GetInt("window_size", 20) - 1)
@@ -872,6 +876,9 @@ void Estimator::Double2Vector()
         _para_pose[0][4], _para_pose[0][5]).toRotationMatrix());
 
     // FIXME: 这应该是考虑到陀螺仪在roll轴和pitch轴上精度高吧.
+    // rot_diff是根据滑窗中第一帧在优化前后的yaw偏差计算得到的旋转矩阵, 之后对滑窗内的所有帧都进行rot_diff的校正.
+    // 这是因为在后端优化时, 我们并没有固定住第一帧的位姿不变, 而是将其作为优化变量进行调整.
+    // 但是因为相机的yaw是不可观测的, 也就是说对于任意的yaw都满足优化函数, 所以优化后我们将偏航角旋转至优化之前的状态.
     double y_diff = origin_R0.x() - origin_R00.x();
     Eigen::Matrix3d rot_diff = Utility::YPR2R(Eigen::Vector3d(y_diff, 0, 0));
     if(abs(abs(origin_R0.y()) - 90 < 1.0) || abs(abs(origin_R00.y()) - 90) < 1.0){
