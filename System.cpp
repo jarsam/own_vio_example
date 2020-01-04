@@ -88,7 +88,7 @@ bool System::PubImuData()
 
 //        std::cout << "Imu t: " << dStampNSec << " gyr: " << vGyr.transpose() << " acc: " << vAcc.transpose() << std::endl;
         GetImuData(dStampNSec / 1e9, vGyr, vAcc);
-        usleep(5000*_delay_times);
+        usleep(40000*_delay_times);
     }
     fsImu.close();
 }
@@ -271,7 +271,7 @@ std::vector<std::pair<std::vector<ImuMessagePtr>, ImageMessagePtr>> System::GetM
             return measurements;
         }
         if (_imu_buf.back()->_header < _feature_buf.front()->_header + _estimator._td){
-            std::cerr << "wait for imu" << std::endl;
+//            std::cerr << "wait for imu" << std::endl;
             return measurements;
         }
         if (_imu_buf.front()->_header > _feature_buf.front()->_header + _estimator._td){

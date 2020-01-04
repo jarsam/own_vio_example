@@ -17,7 +17,7 @@ class ImuFactor: public ceres::SizedCostFunction<15, 7, 9, 7, 9>
 {
 public:
     ImuFactor() = delete;
-    ImuFactor(std::shared_ptr<IntegrationBase> pre_integration): _pre_integration(pre_integration){}
+    ImuFactor(IntegrationBase* pre_integration): _pre_integration(pre_integration){}
 
     virtual bool Evaluate(double const *const *parameters, double* residuals, double **jacobians)const
     {
@@ -114,7 +114,7 @@ public:
         return true;
     }
 
-    std::shared_ptr<IntegrationBase> _pre_integration;
+    IntegrationBase* _pre_integration;
 };
 
 #endif //VIO_EXAMPLE_IMUFACTOR_H

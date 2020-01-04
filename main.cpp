@@ -17,6 +17,7 @@ int main(int argc, char **argv)
 
     thd_PubImuData.join();
     thd_PubImageData.join();
+    thd_Draw.join();
 
     std::cout << "main end... see you ..." << std::endl;
     return 0;

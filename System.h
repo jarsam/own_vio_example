@@ -41,6 +41,7 @@ public:
                                    _last_imu_time(0){
         ReadParameters();
         _tracker_data.resize(svar.GetInt("camera_number", 1));
+        _delay_times = svar.GetDouble("delay_time", 2.0);
     }
 
     bool PubImageData();
@@ -56,7 +57,7 @@ private:
 
 private:
     std::string _data_path;
-    const double _delay_times = 2.0;
+    double _delay_times;
 
     bool _init_pub = false;
     bool _init_feature = 0;
@@ -73,7 +74,6 @@ private:
     // imu中的时间
     double _imu_current_time = -1.0;
 
-    //
     std::mutex _feature_buf_mutex;
     std::mutex _estimator_mutex;
 

@@ -29,7 +29,7 @@ void Estimator::ProcessIMU(double dt, const Eigen::Vector3d &linear_acceleration
     // 注意, 这里只加入一帧Imu信息, 而一帧图像会有很多Imu信息.
     // 也就是说这里只有一个_pre_integrations[0]只有一个Imu信息, 且不会进行预积分过程.
     if(!_pre_integrations[_frame_count])
-        _pre_integrations[_frame_count] = std::shared_ptr<IntegrationBase>(new IntegrationBase(_acc0, _gyr0, _Bas[_frame_count], _Bgs[_frame_count]));
+        _pre_integrations[_frame_count] = new IntegrationBase(_acc0, _gyr0, _Bas[_frame_count], _Bgs[_frame_count]);
     // 进入预积分阶段
     // 第一帧图像特征点数据没有对应的预积分
     if(_frame_count != 0){
@@ -41,6 +41,10 @@ void Estimator::ProcessIMU(double dt, const Eigen::Vector3d &linear_acceleration
 
         // 用Imu数据进行积分,当积完一个measurement中所有Imu数据后,就得到了对应图像帧在世界坐标系的Ps,Vs,Rs
         int j = _frame_count;
+        LOG(ERROR) << "_gyr0: " << _gyr0;
+        LOG(ERROR) << "angular_velocity: " << angular_velocity;
+        LOG(ERROR) << "Bgs: " << _Bgs[j];
+        LOG(ERROR) << "dt: " << dt;
         Eigen::Vector3d un_acc_0 = _Rs[j] * (_acc0 - _Bas[j]) - _g;
         Eigen::Vector3d un_gyr = 0.5 * (_gyr0 + angular_velocity) - _Bgs[j];
         _Rs[j] *= Utility::DeltaQ(un_gyr * dt).toRotationMatrix();
@@ -77,7 +81,7 @@ void Estimator::ProcessImage(const std::map<int, std::vector<std::pair<int, Eige
     // FIXME: 但是这个_tmp_pre_integration好像没有传入image_frame中.
     // 这个时候的初始化的意思就是开始下一帧的预积分了.
     // 这一帧的最后一个Imu信息作为初始值.
-    _tmp_pre_integration = std::shared_ptr<IntegrationBase>(new IntegrationBase(_acc0, _gyr0, _Bas[_frame_count], _Bgs[_frame_count]));
+    _tmp_pre_integration = new IntegrationBase(_acc0, _gyr0, _Bas[_frame_count], _Bgs[_frame_count]);
 
     // 相机和IMU之间的相对旋转
     if (_estimate_extrinsic == 2){
@@ -131,6 +135,7 @@ void Estimator::ProcessImage(const std::map<int, std::vector<std::pair<int, Eige
             _failure_occur = true;
             ClearState();
             SetParameter();
+            return;
         }
 
         SlideWindow();
@@ -410,9 +415,11 @@ void Estimator::SlideWindow()
         if (_frame_count == svar.GetInt("window_size", 20)){
             for(int i = 0; i < svar.GetInt("window_size", 20); ++i){
                 std::swap(_pre_integrations[i], _pre_integrations[i + 1]);
+
                 _dt_buf[i].swap(_dt_buf[i + 1]);
                 _linear_acceleration_buf[i].swap(_linear_acceleration_buf[i + 1]);
                 _angular_velocity_buf[i].swap(_angular_velocity_buf[i + 1]);
+
                 _headers[i] = _headers[i + 1];
                 _Ps[i].swap(_Ps[i + 1]);
                 _Vs[i].swap(_Vs[i + 1]);
@@ -427,10 +434,10 @@ void Estimator::SlideWindow()
             _Bas[svar.GetInt("window_size", 20)] = _Bas[svar.GetInt("window_size", 20) - 1];
             _Bgs[svar.GetInt("window_size", 20)] = _Bgs[svar.GetInt("window_size", 20) - 1];
 
-            _pre_integrations[svar.GetInt("window_size", 20)] =
-                std::shared_ptr<IntegrationBase>(new IntegrationBase{_acc0, _gyr0,
-                                                                     _Bas[svar.GetInt("window_size", 20)],
-                                                                     _Bgs[svar.GetInt("window_size", 20)]});
+            delete _pre_integrations[svar.GetInt("window_size")];
+            _pre_integrations[svar.GetInt("window_size", 20)] = new IntegrationBase{_acc0, _gyr0,
+                                                                                    _Bas[svar.GetInt("window_size", 20)],
+                                                                                    _Bgs[svar.GetInt("window_size", 20)]};
             _dt_buf[svar.GetInt("window_size", 20)].clear();
             _linear_acceleration_buf[svar.GetInt("window_size", 20)].clear();
             _angular_velocity_buf[svar.GetInt("window_size", 20)].clear();
@@ -462,7 +469,7 @@ void Estimator::SlideWindow()
                 Eigen::Vector3d tmp_linear_acceleration = _linear_acceleration_buf[_frame_count][i];
                 Eigen::Vector3d tmp_angular_velocity = _angular_velocity_buf[_frame_count][i];
 
-                _pre_integrations[_frame_count - 1] ->PushBack(tmp_dt, tmp_linear_acceleration, tmp_angular_velocity);
+                _pre_integrations[_frame_count - 1]->PushBack(tmp_dt, tmp_linear_acceleration, tmp_angular_velocity);
                 _dt_buf[_frame_count - 1].emplace_back(tmp_dt);
                 _linear_acceleration_buf[_frame_count - 1].emplace_back(tmp_linear_acceleration);
                 _angular_velocity_buf[_frame_count - 1].emplace_back(tmp_angular_velocity);
@@ -475,10 +482,10 @@ void Estimator::SlideWindow()
             _Bas[_frame_count - 1] = _Bas[_frame_count];
             _Bgs[_frame_count - 1] = _Bgs[_frame_count];
 
-            _pre_integrations[svar.GetInt("window_size", 20)] =
-                std::shared_ptr<IntegrationBase>(new IntegrationBase{_acc0, _gyr0,
-                                                                     _Bas[svar.GetInt("window_size", 20)],
-                                                                     _Bgs[svar.GetInt("window_size", 20)]});
+            delete _pre_integrations[svar.GetInt("window_size")];
+            _pre_integrations[svar.GetInt("window_size", 20)] = new IntegrationBase{_acc0, _gyr0,
+                                                                                    _Bas[svar.GetInt("window_size", 20)],
+                                                                                    _Bgs[svar.GetInt("window_size", 20)]};
             _dt_buf[svar.GetInt("window_size", 20)].clear();
             _linear_acceleration_buf[svar.GetInt("window_size", 20)].clear();
             _angular_velocity_buf[svar.GetInt("window_size", 20)].clear();
@@ -560,14 +567,14 @@ void Estimator::BackendOptimization()
         problem.AddResidualBlock(marginalization_factor, NULL, _last_marginalization_parameter_blocks);
     }
 
+    // FIXME: 这里的意思是某个滑动窗口时间太长了, 但是这在实际的SLAM中是有可能的
+    // 比如无人机一直待在某个地方不动, 一直Margin Second New
+    // 这里是从第1个窗口中直接开始的, 不应该是从第0个窗口开始吗?
+    // 也就是说这里放入的窗口是1-20 而不是0-19.
+
     // 添加Imu的residual
     for(int i = 0; i < svar.GetInt("window_size", 20); ++i){
         int j = i + 1;
-        // FIXME: 这里的意思是某个滑动窗口时间太长了, 但是这在实际的SLAM中是有可能的
-        // 比如无人机一直待在某个地方不动, 一直Margin Second New
-
-        // 这里是从第1个窗口中直接开始的, 不应该是从第0个窗口开始吗?
-        // 也就是说这里放入的窗口是1-20 而不是0-19.
         if (_pre_integrations[j]->_sum_dt > 10.0)
             continue;
         auto* imu_factor = new ImuFactor(_pre_integrations[j]);
@@ -612,31 +619,15 @@ void Estimator::BackendOptimization()
         }
     }
 
-//    if (_relocalization_info){
-//        std::shared_ptr<ceres::LocalParameterization> local_parameterization =
-//            std::shared_ptr<ceres::LocalParameterization>(new PoseLocalParameterization());
-//        problem.AddParameterBlock(_relo_pose.data(), POSE_SIZE, local_parameterization.get());
-//        int retrive_feature_index = 0;
-//        int feature_index = -1;
-//        for(auto &it_per_id: _feature_manager._feature){
-//            it_per_id._used_num = it_per_id._feature_per_frame.size();
-//            if (!(it_per_id._used_num >= 2 && it_per_id._start_frame < svar.GetInt("window_size", 20) - 2))
-//                continue;
-//            ++feature_index;
-//            int start = it_per_id._start_frame;
-//            if (start <= _relo_frame_local_index){
-//            }
-//        }
-//    }
-
+    double solver_time = svar.GetDouble("solver_time", 0.04);
     ceres::Solver::Options options;
     options.linear_solver_type = ceres::DENSE_SCHUR;
     options.trust_region_strategy_type = ceres::DOGLEG;
     options.max_num_iterations = 100;
     if (_marginalization_flag == MARGIN_OLD)
-        options.max_solver_time_in_seconds = 0.04 * 4 / 5.0;
+        options.max_solver_time_in_seconds = solver_time * 4 / 5.0;
     else
-        options.max_solver_time_in_seconds = 0.04;
+        options.max_solver_time_in_seconds = solver_time;
 
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
@@ -740,6 +731,7 @@ void Estimator::BackendOptimization()
 
         // FIXME: 为什么是向右移位, 并且没保留逆深度的状态量
         // 这里让第i位指向i-1位就意味着抛弃了第0个的状态量.
+        // 因为在下一次的优化中, 首先会调用Vector2Double()函数, 这样_para_pose[0]就会指向_para_pose[1]
         std::unordered_map<long, double * > addr_shift;
         for(int i = 1; i <= svar.GetInt("window_size", 20); ++i){
             addr_shift[reinterpret_cast<long>(_para_pose[i])] = _para_pose[i - 1];
@@ -881,7 +873,7 @@ void Estimator::Double2Vector()
     // 但是因为相机的yaw是不可观测的, 也就是说对于任意的yaw都满足优化函数, 所以优化后我们将偏航角旋转至优化之前的状态.
     double y_diff = origin_R0.x() - origin_R00.x();
     Eigen::Matrix3d rot_diff = Utility::YPR2R(Eigen::Vector3d(y_diff, 0, 0));
-    if(abs(abs(origin_R0.y()) - 90 < 1.0) || abs(abs(origin_R00.y()) - 90) < 1.0){
+    if(abs(abs(origin_R0.y()) - 90) < 1.0 || abs(abs(origin_R00.y()) - 90) < 1.0){
         rot_diff = _Rs[0] * Eigen::Quaterniond(_para_pose[0][6], _para_pose[0][3], _para_pose[0][4],
             _para_pose[0][5]).toRotationMatrix().transpose();
     }
@@ -905,10 +897,6 @@ void Estimator::Double2Vector()
     _feature_manager.SetDepth(dep);
     if (svar.GetInt("estimate_td"))
         _td = _para_td[0][0];
-
-    if (_relocalization_info){
-
-    }
 }
 
 bool Estimator::FailureDetection()

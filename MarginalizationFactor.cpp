@@ -8,7 +8,7 @@ MarginalizationFactor::MarginalizationFactor(MarginalizationInfo* marginalizatio
 : _marginalization_info(marginalization_info)
 {
     int cnt = 0;
-    for(auto it: _marginalization_info->_keep_block_idx){
+    for(auto it: _marginalization_info->_keep_block_size){
         mutable_parameter_block_sizes()->emplace_back(it);
         cnt += it;
     }
@@ -30,7 +30,33 @@ void ResidualBlockInfo::Evaluate()
     _cost_function->Evaluate(_parameter_blocks.data(), _residuals.data(), _raw_jacobians);
 
     if (_loss_function){
+        double residual_scaling, alpha_sq_norm;
+        double sq_norm, rho[3];
 
+        sq_norm = _residuals.squaredNorm();
+        _loss_function->Evaluate(sq_norm, rho);
+
+        double sqrt_rho1_ = sqrt(rho[1]);
+
+        if ((sq_norm == 0.0) || (rho[2] <= 0.0))
+        {
+            residual_scaling = sqrt_rho1_;
+            alpha_sq_norm = 0.0;
+        }
+        else
+        {
+            const double D = 1.0 + 2.0 * sq_norm * rho[2] / rho[1];
+            const double alpha = 1.0 - sqrt(D);
+            residual_scaling = sqrt_rho1_ / (1 - alpha);
+            alpha_sq_norm = alpha / sq_norm;
+        }
+
+        for (int i = 0; i < static_cast<int>(_parameter_blocks.size()); i++)
+        {
+            _jacobians[i] = sqrt_rho1_ * (_jacobians[i] - alpha_sq_norm * _residuals * (_residuals.transpose() * _jacobians[i]));
+        }
+
+        _residuals *= residual_scaling;
     }
 }
 
@@ -42,7 +68,6 @@ MarginalizationInfo::~MarginalizationInfo()
     for(int i = 0; i < _factors.size(); ++i){
         delete[] _factors[i]->_raw_jacobians;
         delete _factors[i]->_cost_function;
-        delete _factors[i]->_loss_function;
         delete _factors[i];
     }
 }
@@ -145,14 +170,14 @@ void MarginalizationInfo::Marginalize()
         ++i;
         i = i % svar.GetInt("thread_number", 4);
     }
-    for(int i = 0; i < svar.GetInt("thread_number", 4); ++i){
+    for(i = 0; i < svar.GetInt("thread_number", 4); ++i){
         threads_struct[i]._A = Eigen::MatrixXd::Zero(pos, pos);
         threads_struct[i]._b = Eigen::VectorXd::Zero(pos);
         threads_struct[i]._parameter_block_size = _parameter_block_size;
         threads_struct[i]._parameter_block_idx = _parameter_block_idx;
         int ret = pthread_create(&threads_id[i], NULL, ThreadConstructA, (void*)&(threads_struct[i]));
     }
-    for(int i = svar.GetInt("thread_number", 4) - 1; i >= 0; --i){
+    for(i = svar.GetInt("thread_number", 4) - 1; i >= 0; --i){
         pthread_join(threads_id[i], NULL);
         A += threads_struct[i]._A;
         b += threads_struct[i]._b;
@@ -213,8 +238,8 @@ bool MarginalizationFactor::Evaluate(double const *const *parameters, double *re
     Eigen::VectorXd dx(n);
     // FIXME: 该Evaluate函数是在PreMarginalize()函数中调用的, 但是在第一次的时候, _keep_block_idx都没有值.
     // 且为什么要这么做.
-    for(int i = 0; i < _marginalization_info->_keep_block_idx.size(); ++i){
-        int size = _marginalization_info->_keep_block_idx[i];
+    for(int i = 0; i < _marginalization_info->_keep_block_size.size(); ++i){
+        int size = _marginalization_info->_keep_block_size[i];
         int idx = _marginalization_info->_keep_block_idx[i] - m;
         Eigen::VectorXd x = Eigen::Map<const Eigen::VectorXd>(parameters[i], size);
         Eigen::VectorXd x0 = Eigen::Map<const Eigen::VectorXd>(_marginalization_info->_keep_block_data[i], size);
@@ -237,9 +262,9 @@ bool MarginalizationFactor::Evaluate(double const *const *parameters, double *re
     Eigen::Map<Eigen::VectorXd>(residuals, n) = _marginalization_info->_linearized_residuals +
         _marginalization_info->_linearized_jacobians * dx;
     if(jacobians){
-        for(int i = 0; i < _marginalization_info->_keep_block_idx.size(); ++i){
+        for(int i = 0; i < _marginalization_info->_keep_block_size.size(); ++i){
             if(jacobians[i]){
-                int size = _marginalization_info->_keep_block_idx[i];
+                int size = _marginalization_info->_keep_block_size[i];
                 int local_size = _marginalization_info->LocalSize(size);
                 int idx = _marginalization_info->_keep_block_idx[i] - m;
                 Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,Eigen::RowMajor>> jacobian(jacobians[i], n, size);

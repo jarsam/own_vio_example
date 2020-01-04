@@ -29,7 +29,7 @@ public:
     // 第l帧相机到当前帧相机的位移,只不过没有尺度信息
     // 尺度是初始化的时候的第l帧到初始化帧的尺度
     Eigen::Vector3d _T;
-    std::shared_ptr<IntegrationBase> _pre_integration;
+    IntegrationBase* _pre_integration;
     bool _keyframe_flag;
 };
 

@@ -92,7 +92,6 @@ private:
         _linear_acceleration_buf.resize(svar.GetInt("window_size", 20) + 1, std::vector<Eigen::Vector3d>());
         _angular_velocity_buf.resize(svar.GetInt("window_size", 20) + 1, std::vector<Eigen::Vector3d>());
         _headers.resize(svar.GetInt("window_size", 20) + 1, 0);
-        _pre_integrations.resize(svar.GetInt("window_size", 20) + 1, nullptr);
         _ric.resize(svar.GetInt("camera_number", 1), Eigen::Matrix3d::Zero());
         _tic.resize(svar.GetInt("camera_number", 1), Eigen::Vector3d::Zero());
 
@@ -129,6 +128,10 @@ private:
         _para_tr = new double*[1];
         _para_tr[0] = new double[1];
 
+        _pre_integrations = new IntegrationBase*[svar.GetInt("window_size") + 1];
+        for(int i = 0; i < svar.GetInt("window_size") + 1; ++i)
+            _pre_integrations[i] = nullptr;
+
         _tmp_pre_integration = nullptr;
         for(int i = 0; i < svar.GetInt("window_size", 20) + 1; ++i){
             _Rs[i].setIdentity();
@@ -136,7 +139,6 @@ private:
             _Vs[i].setZero();
             _Bas[i].setZero();
             _Bgs[i].setZero();
-            _pre_integrations[i] = nullptr;
         }
 
         for(auto &it: _all_image_frame){
@@ -198,13 +200,13 @@ public:
     double** _para_td;
     double** _para_tr;
 
+    IntegrationBase **_pre_integrations;
+
     Eigen::Vector3d _g;
     Eigen::Vector3d _acc0, _gyr0;// 最近一次接收到的Imu数据
     // _backR0, _backP0是MARGIN的帧的位姿.
     Eigen::Matrix3d _backR0, _lastR, _lastR0;
     Eigen::Vector3d _backP0, _lastP, _lastP0;
-
-    std::vector<std::shared_ptr<IntegrationBase>> _pre_integrations;
 
     std::vector<Eigen::Vector3d> _key_poses;
     std::vector<Eigen::Vector3d> _match_points;
@@ -223,7 +225,7 @@ public:
     FeatureManager _feature_manager;
     InitialExRotation _initial_ex_rotation;
     // 用于在创建ImageFrame对象时,把该指针赋给imageframe.pre_integration.
-    std::shared_ptr<IntegrationBase> _tmp_pre_integration;
+    IntegrationBase* _tmp_pre_integration;
     // 上一次边缘化的信息.
     MarginalizationInfo* _last_marginalization_info;
     // 之前边缘化的参数块, 已经把要marg 的参数块去除了.
