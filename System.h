@@ -9,6 +9,7 @@
 #include <opencv2/opencv.hpp>
 #include <Eigen/Dense>
 #include <GSLAM/core/GSLAM.h>
+#include <pangolin/pangolin.h>
 
 #include "FeatureTracker.h"
 #include "Estimator.h"
@@ -42,6 +43,24 @@ public:
         ReadParameters();
         _tracker_data.resize(svar.GetInt("camera_number", 1));
         _delay_times = svar.GetDouble("delay_time", 2.0);
+        _ofs_pose.open("./pose_output.txt", std::fstream::out);
+        if(!_ofs_pose.is_open())
+            std::cerr << "ofs_pose is not open" << std::endl;
+    }
+    ~System(){
+        _start_backend = false;
+
+        pangolin::QuitAll();
+        _feature_buf_mutex.lock();
+        while(!_feature_buf.empty())
+            _feature_buf.pop();
+        while(!_imu_buf.empty())
+            _imu_buf.pop();
+        _feature_buf_mutex.unlock();
+
+        _estimator_mutex.lock();
+        _estimator.ClearState();
+        _ofs_pose.close();
     }
 
     bool PubImageData();
@@ -74,6 +93,8 @@ private:
     // imu中的时间
     double _imu_current_time = -1.0;
 
+    std::vector<Eigen::Vector3d> _draw_path;
+
     std::mutex _feature_buf_mutex;
     std::mutex _estimator_mutex;
 
@@ -82,7 +103,12 @@ private:
 
     std::condition_variable _con;
 
+    std::ofstream _ofs_pose;
+
     std::vector<FeatureTracker> _tracker_data;
 
     Estimator _estimator;
+
+    pangolin::OpenGlRenderState _cam_state;
+    pangolin::View _cam;
 };

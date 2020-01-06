@@ -88,7 +88,7 @@ bool System::PubImuData()
 
 //        std::cout << "Imu t: " << dStampNSec << " gyr: " << vGyr.transpose() << " acc: " << vAcc.transpose() << std::endl;
         GetImuData(dStampNSec / 1e9, vGyr, vAcc);
-        usleep(40000*_delay_times);
+        usleep(5000*_delay_times);
     }
     fsImu.close();
 }
@@ -112,15 +112,12 @@ bool System::PubImageData()
 
     std::string firstLine;
     std::getline(fsImage, firstLine);
-    while (std::getline(fsImage, sImage_line) && !sImage_line.empty())
-    {
+    while (std::getline(fsImage, sImage_line) && !sImage_line.empty()) {
         std::vector<std::string > outputStr;
         std::stringstream ss(sImage_line);
         std::string str;
         while (std::getline(ss, str, ','))
-        {
             outputStr.push_back(str);
-        }
         dStampNSec = std::stod(outputStr[0]);
         sImgFileName = outputStr[1];
 
@@ -128,8 +125,7 @@ bool System::PubImageData()
         imagePath.resize(imagePath.size() - 1);
         cv::Mat img = cv::imread(imagePath.c_str(), 0);
 
-        if (img.empty())
-        {
+        if (img.empty()) {
             std::cerr << "image is empty! path: " << imagePath << std::endl;
             return false;
         }
@@ -270,11 +266,11 @@ std::vector<std::pair<std::vector<ImuMessagePtr>, ImageMessagePtr>> System::GetM
         if (_imu_buf.empty() || _feature_buf.empty()){
             return measurements;
         }
-        if (_imu_buf.back()->_header < _feature_buf.front()->_header + _estimator._td){
+        if (!(_imu_buf.back()->_header > _feature_buf.front()->_header + _estimator._td)){
 //            std::cerr << "wait for imu" << std::endl;
             return measurements;
         }
-        if (_imu_buf.front()->_header > _feature_buf.front()->_header + _estimator._td){
+        if (!(_imu_buf.front()->_header < _feature_buf.front()->_header + _estimator._td)){
             _feature_buf.pop();
             continue;
         }
@@ -348,8 +344,12 @@ void System::ProcessBackEnd()
                     ry = w1 * ry + w2 * imu_msg->_angular_velocity.y();
                     rz = w1 * rz + w2 * imu_msg->_angular_velocity.z();
                     // FIXME:感觉应该是dt_1+dt_2.
-                    _estimator.ProcessIMU(dt_1, Eigen::Vector3d(dx, dy, dz), Eigen::Vector3d(rx, ry, rz));
+                    _estimator.ProcessIMU(dt_1, Eigen::Vector3d(imu_msg->_linear_acceleration.x(), imu_msg->_linear_acceleration.y(), imu_msg->_linear_acceleration.z()),
+                        Eigen::Vector3d(imu_msg->_angular_velocity.x(), imu_msg->_angular_velocity.y(), imu_msg->_angular_velocity.z()));
                 }
+
+//                LOG(ERROR) << "gyr: " << Eigen::Vector3d(dx, dy, dz).transpose();
+//                LOG(ERROR) << "acc: " << Eigen::Vector3d(rx, ry, rz).transpose();
             }
             std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> image;
             for(int i = 0; i < img_msg->_points.size(); ++i){
@@ -371,7 +371,14 @@ void System::ProcessBackEnd()
 
             _estimator.ProcessImage(image, img_msg->_header);
             if(_estimator._solver_flag == Estimator::SolverFlag::NON_LINEAR){
-
+                Eigen::Vector3d p_wi;
+                Eigen::Quaterniond q_wi;
+                q_wi = Eigen::Quaterniond(_estimator._Rs[svar.GetInt("window_size")]);
+                p_wi = _estimator._Ps[svar.GetInt("window_size")];
+                _draw_path.emplace_back(p_wi);
+                double stamp = _estimator._headers[svar.GetInt("window_size")];
+                _ofs_pose << std::fixed << stamp << " " << p_wi(0) << " " << p_wi(1) << " " << p_wi(2) << " "
+                          << q_wi.w() << " " << q_wi.x() << " " << q_wi.y() << " " << q_wi.z() << std::endl;
             }
         }
         _estimator_mutex.unlock();
@@ -380,5 +387,55 @@ void System::ProcessBackEnd()
 
 void System::Draw()
 {
-    usleep(5000);
+    if (svar.GetInt("show_draw", 1)){
+        pangolin::CreateWindowAndBind("Trajectory Viewer", 1024, 768);
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        _cam_state = pangolin::OpenGlRenderState(
+            pangolin::ProjectionMatrix(1024, 768, 500, 500, 512, 384, 0.1, 1000),
+            pangolin::ModelViewLookAt(-5, 0, 15, 7, 0, 0, 1.0, 0.0, 0.0)
+            );
+        _cam = pangolin::CreateDisplay()
+            .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -1024.0f / 768.0f)
+            .SetHandler(new pangolin::Handler3D(_cam_state));
+
+        while (pangolin::ShouldQuit() == false){
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            _cam.Activate(_cam_state);
+            glClearColor(0.75f, 0.75f, 0.75f, 0.75f);
+            glColor3f(0, 0, 1);
+            pangolin::glDrawAxis(3);
+
+            // draw poses
+            glColor3f(0, 0, 0);
+            glLineWidth(2);
+            glBegin(GL_LINES);
+            int nPath_size = _draw_path.size();
+            for(int i = 0; i < nPath_size-1; ++i)
+            {
+                glVertex3f(_draw_path[i].x(), _draw_path[i].y(), _draw_path[i].z());
+                glVertex3f(_draw_path[i+1].x(), _draw_path[i+1].y(), _draw_path[i+1].z());
+            }
+            glEnd();
+
+            // points
+            if (_estimator._solver_flag == Estimator::SolverFlag::NON_LINEAR)
+            {
+                glPointSize(5);
+                glBegin(GL_POINTS);
+                for(int i = 0; i < svar.GetInt("window_size") + 1; ++i)
+                {
+                    Eigen::Vector3d p_wi = _estimator._Ps[i];
+                    glColor3f(1, 0, 0);
+                    glVertex3d(p_wi[0],p_wi[1],p_wi[2]);
+                }
+                glEnd();
+            }
+            pangolin::FinishFrame();
+            usleep(5000);
+        }
+    }
 }

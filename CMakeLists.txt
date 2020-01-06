@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_BUILD_TYPE "Release")
 #set(CMAKE_BUILD_TYPE "Debug")
 set(CMAKE_CXX_FLAGS "-std=c++11")
-set(CMAKE_CXX_FLAGS_RELEASE "-O1 -Wall -g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Wall -g")
 find_package(GLEW REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Ceres REQUIRED)
@@ -13,9 +13,10 @@ find_package(Pangolin REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Boost REQUIRED COMPONENTS filesystem program_options system)
 find_package(GSLAM REQUIRED)
+find_package(Sophus REQUIRED)
 
 include_directories(.
-        ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/Backend
         ${EIGEN3_INCLUDE_DIR}
         ${CERES_INCLUDE_DIRS}
         ${Pangolin_INCLUDE_DIRS}
@@ -23,6 +24,7 @@ include_directories(.
         ${GLEW_INCLUDE_DIRS}
         ${GSLAM_INCLUDE_DIRS}
         ${OpenCV_INCLUDE_DIRS}
+        ${Sophus_INCLUDE_DIRS}
 )
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
@@ -39,6 +41,9 @@ add_library(MyVio
         InitialSfM.cpp
         MotionEstimator.cpp
         MarginalizationFactor.cpp
+        Backend/Problem.cpp
+        Backend/Vertex.cpp
+        Backend/Edge.cpp
 )
 
 target_link_libraries(MyVio
@@ -49,6 +54,7 @@ target_link_libraries(MyVio
         ${Boost_LIBRARIES}
         ${EIGEN3_LIBS}
         ${GSLAM_LIBS}
+        ${Sophus_LIBRARIES}
         )
 
 add_executable(vio_example main.cpp)

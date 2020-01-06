@@ -41,10 +41,10 @@ void Estimator::ProcessIMU(double dt, const Eigen::Vector3d &linear_acceleration
 
         // 用Imu数据进行积分,当积完一个measurement中所有Imu数据后,就得到了对应图像帧在世界坐标系的Ps,Vs,Rs
         int j = _frame_count;
-        LOG(ERROR) << "_gyr0: " << _gyr0;
-        LOG(ERROR) << "angular_velocity: " << angular_velocity;
-        LOG(ERROR) << "Bgs: " << _Bgs[j];
-        LOG(ERROR) << "dt: " << dt;
+//        LOG(ERROR) << "_gyr0: " << _gyr0;
+//        LOG(ERROR) << "angular_velocity: " << angular_velocity;
+//        LOG(ERROR) << "Bgs: " << _Bgs[j];
+//        LOG(ERROR) << "dt: " << dt;
         Eigen::Vector3d un_acc_0 = _Rs[j] * (_acc0 - _Bas[j]) - _g;
         Eigen::Vector3d un_gyr = 0.5 * (_gyr0 + angular_velocity) - _Bgs[j];
         _Rs[j] *= Utility::DeltaQ(un_gyr * dt).toRotationMatrix();
@@ -527,11 +527,14 @@ void Estimator::SolveOdometry()
     if (_solver_flag == NON_LINEAR){
         // 三角化那些没有被三角化的点.
         _feature_manager.Triangulate(_Ps, _tic, _ric);
-        BackendOptimization();
+        if (svar.GetInt("BA_ceres", 1))
+            BackendOptimizationCeres();
+        else
+            BackendOptimizationEigen();
     }
 }
 
-void Estimator::BackendOptimization()
+void Estimator::BackendOptimizationCeres()
 {
     ceres::Problem problem;
     ceres::LossFunction *loss_function = new ceres::CauchyLoss(1.0);
@@ -935,4 +938,28 @@ bool Estimator::FailureDetection()
     }
 
     return false;
+}
+
+void Estimator::BackendOptimizationEigen()
+{
+    LossFunction *loss_function = new CauthyLoss(1.0);
+    Problem problem(Problem::SLAM_PROBLEM);
+    std::vector<std::shared_ptr<VertexPose> > vertex_cams;
+    std::vector<std::shared_ptr<VertexSpeedBias> > vertex_speedbias;
+    int pose_dim = 0;
+
+    // 先把外参数节点加入图优化, 这个节点在以后一直会被用到, 所以放在第一个.
+    std::shared_ptr<VertexPose> vertex_ext(new VertexPose());
+    {
+        Eigen::VectorXd pose(7);
+        pose << _para_ex_pose[0][0], _para_ex_pose[0][1], _para_ex_pose[0][2], _para_ex_pose[0][3],
+            _para_ex_pose[0][4], _para_ex_pose[0][5], _para_ex_pose[0][6];
+        vertex_ext->SetParameters(pose);
+
+        if (!svar.GetInt("estimate_extrinsic", 1)){
+            vertex_ext->SetFixed();
+        }
+        problem.AddVertex(vertex_ext);
+        pose_dim += vertex_ext->LocalDimension();
+    }
 }

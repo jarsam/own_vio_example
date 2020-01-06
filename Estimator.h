@@ -21,6 +21,9 @@
 #include "ImuFactor.h"
 #include "ProjectionTdFactor.h"
 #include "ProjectionFactor.h"
+#include "Problem.h"
+#include "VertexPose.h"
+#include "VertexSpeedBias.h"
 
 class Estimator
 {
@@ -67,8 +70,6 @@ public:
     }
     void ProcessIMU(double dt, const Eigen::Vector3d &linear_acceleration, const Eigen::Vector3d &angular_velocity);
     void ProcessImage(const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double header);
-
-private:
     void ClearState(){
         _failure_occur = false;
         _relocalization_info = false;
@@ -160,7 +161,8 @@ private:
     void SlideWindowOld();
     void SlideWindowNew();
     void SolveOdometry();
-    void BackendOptimization();
+    void BackendOptimizationCeres();
+    void BackendOptimizationEigen();
     void Vector2Double();
     void Double2Vector();
     bool FailureDetection();
