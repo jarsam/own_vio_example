@@ -84,6 +84,17 @@ void Problem::ResizePoseHessiansWhenAddingPose(std::shared_ptr<Vertex> v)
     _H_prior.bottomRows(v->LocalDimension()).setZero();
 }
 
+void Problem::ExtendHessiansPriorSize(int dim)
+{
+    int size = _H_prior.rows() + dim;
+    _H_prior.conservativeResize(size, size);
+    _b_prior.conservativeResize(size);
+
+    _b_prior.tail(dim).setZero();
+    _H_prior.rightCols(dim).setZero();
+    _H_prior.bottomRows(dim).setZero();
+}
+
 std::vector<std::shared_ptr<Edge> > Problem::GetConnectedEdges(std::shared_ptr<Vertex> vertex)
 {
     std::vector<std::shared_ptr<Edge> > edges;
@@ -97,4 +108,54 @@ std::vector<std::shared_ptr<Edge> > Problem::GetConnectedEdges(std::shared_ptr<V
     }
 
     return edges;
+}
+
+void Problem::AddOrderingSLAM(std::shared_ptr<Vertex> v)
+{
+    if (IsPoseVertex(v)){
+        v->SetOrderingId(_ordering_poses);
+        _ordering_poses += v->LocalDimension();
+        _idx_pose_verticies.insert(std::pair<unsigned long, std::shared_ptr<Vertex> >(v->Id(), v));
+    }
+    else if(IsLandmarkVertex(v)){
+        v->SetOrderingId(_ordering_landmarks);
+        _ordering_landmarks += v->LocalDimension();
+        _idx_landmark_verticies.insert(std::make_pair(v->Id(), v));
+    }
+}
+
+void Problem::SetOrdering()
+{
+    // 每次都要重新计数
+    _ordering_poses = 0;
+    _ordering_landmarks = 0;
+    _ordering_generic = 0;
+
+    for(auto vertex: _verticies){
+        _ordering_generic += vertex.second->LocalDimension(); // 所有的优化变量总维度
+
+        // 如果是SLAM问题, 则还要分别统计pose和landmark的维度, 后面会对它们进行排序
+        if(_problem_type == SLAM_PROBLEM)
+            AddOrderingSLAM(vertex.second);
+    }
+
+    if (_problem_type == SLAM_PROBLEM){
+        // 这里要保证landmark在后, pose在前
+        // 所以要把landmark的ordering加上pose的数量
+        unsigned long all_pose_dimension = _ordering_poses;
+        for(auto landmark_vertex: _idx_landmark_verticies){
+            landmark_vertex.second->SetOrderingId(
+                landmark_vertex.second->OrderingId() + all_pose_dimension
+                );
+        }
+    }
+}
+
+bool Problem::Solve(int iterations)
+{
+    if (_edges.size() == 0 || _verticies.size() == 0)
+        return false;
+
+    // 统计优化变量的维度, 为构建H 矩阵做准备
+    SetOrdering();
 }

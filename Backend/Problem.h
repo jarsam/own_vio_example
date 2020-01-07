@@ -39,6 +39,8 @@ public:
     bool AddEdge(std::shared_ptr<Edge> edge);
     bool RemoveEdge(std::shared_ptr<Edge> edge);
 
+    bool Solve(int iterations = 10);
+
     MatXX GetHessianPrior(){ return _H_prior;}
     VecX GetbPrior(){ return _b_prior;}
     VecX GetErrPrior(){ return _err_prior;}
@@ -48,7 +50,7 @@ public:
     void SetbPrior(const VecX& b){_b_prior = b;}
     void SetErrPrior(const VecX& b){_err_prior = b;}
     void SetJtPrior(const MatXX& J){_Jt_prior_inv = J;}
-    void Extend
+    void ExtendHessiansPriorSize(int dim);
 
 private:
     // 设置各顶点的ordering_index
@@ -72,6 +74,9 @@ private:
     // 获取某个顶点连接的边
     std::vector<std::shared_ptr<Edge> > GetConnectedEdges(std::shared_ptr<Vertex> vertex);
 
+    // set ordering for new vertex in slam problem
+    void AddOrderingSLAM(std::shared_ptr<Vertex> v);
+
 private:
     ProblemType _problem_type;
 
@@ -87,9 +92,6 @@ private:
     // verticies need to marg
     HashVertex _verticies_marg;
 
-    std::map<unsigned long, std::shared_ptr<Vertex> > _idx_pose_verticies; // 以ordering排序的pose顶点
-    std::map<unsigned long, std::shared_ptr<Vertex> > _idx_landmark_verticies; // 以ordering排序的landmark顶点
-
     // 先验部分信息
     MatXX _H_prior;
     VecX _b_prior;
@@ -98,6 +100,15 @@ private:
 
     MatXX _Jt_prior_inv;
     VecX _err_prior;
+
+    // ordering related
+    unsigned long _ordering_poses = 0; // poses的大小
+    unsigned long _ordering_landmarks = 0; // landmarks的大小
+    unsigned long _ordering_generic = 0; // poses+landmarks的总大小
+    // id为vertex的id
+    std::map<unsigned long, std::shared_ptr<Vertex> > _idx_pose_verticies; // 以ordering排序的pose顶点
+    // id为landmark的id
+    std::map<unsigned long, std::shared_ptr<Vertex> > _idx_landmark_verticies; // 以ordering排序的landmark顶点
 };
 
 

@@ -1043,7 +1043,9 @@ void Estimator::BackendOptimizationEigen()
             problem.SetbPrior(_b_prior);
             problem.SetErrPrior(_err_prior);
             problem.SetJtPrior(_J_prior_inv);
-            problem.ExtendHessiansPriorSize(15);
+            problem.ExtendHessiansPriorSize(15);// 扩展这个prior装新的pose
         }
     }
+
+    problem.Solve(10);
 }
