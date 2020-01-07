@@ -944,8 +944,8 @@ void Estimator::BackendOptimizationEigen()
 {
     LossFunction *loss_function = new CauthyLoss(1.0);
     Problem problem(Problem::SLAM_PROBLEM);
-    std::vector<std::shared_ptr<VertexPose> > vertex_cams;
-    std::vector<std::shared_ptr<VertexSpeedBias> > vertex_speedbias;
+    std::vector<std::shared_ptr<VertexPose> > vertex_cam_vec;
+    std::vector<std::shared_ptr<VertexSpeedBias> > vertex_speedbias_vec;
     int pose_dim = 0;
 
     // 先把外参数节点加入图优化, 这个节点在以后一直会被用到, 所以放在第一个.
@@ -961,5 +961,89 @@ void Estimator::BackendOptimizationEigen()
         }
         problem.AddVertex(vertex_ext);
         pose_dim += vertex_ext->LocalDimension();
+    }
+
+    for(int i = 0; i < svar.GetInt("window_size") + 1; ++i){
+        std::shared_ptr<VertexPose> vertex_cam(new VertexPose());
+        Eigen::VectorXd pose(7);
+        pose << _para_pose[i][0], _para_pose[i][1], _para_pose[i][2], _para_pose[i][3],
+            _para_pose[i][4], _para_pose[i][5], _para_pose[i][6];
+        vertex_cam->SetParameters(pose);
+        vertex_cam_vec.emplace_back(vertex_cam);
+        problem.AddVertex(vertex_cam);
+        pose_dim += vertex_cam->LocalDimension();
+
+        std::shared_ptr<VertexSpeedBias> vertex_speedbias(new VertexSpeedBias());
+        Eigen::VectorXd speedbias(9);
+        speedbias << _para_speed_bias[i][0], _para_speed_bias[i][1], _para_speed_bias[i][2],
+            _para_speed_bias[i][3], _para_speed_bias[i][4], _para_speed_bias[i][5],
+            _para_speed_bias[i][6], _para_speed_bias[i][7], _para_speed_bias[i][8];
+        vertex_speedbias->SetParameters(speedbias);
+        vertex_speedbias_vec.emplace_back(vertex_speedbias);
+        problem.AddVertex(vertex_speedbias);
+        pose_dim += vertex_speedbias->LocalDimension();
+    }
+
+    for(int i = 0; i < svar.GetInt("window_size"); ++i){
+        int j = i + 1;
+        if (_pre_integrations[j]->_sum_dt > 10.0)
+            continue;
+        std::shared_ptr<EdgeImu> imu_edge(new EdgeImu(_pre_integrations[j]));
+        std::vector<std::shared_ptr<Vertex> > edge_vertex;
+        edge_vertex.emplace_back(vertex_cam_vec[i]);
+        edge_vertex.emplace_back(vertex_speedbias_vec[i]);
+        edge_vertex.emplace_back(vertex_cam_vec[j]);
+        edge_vertex.emplace_back(vertex_speedbias_vec[j]);
+        imu_edge->SetVertex(edge_vertex);
+        problem.AddEdge(imu_edge);
+    }
+
+    std::vector<std::shared_ptr<VertexInverseDepth> > vertex_pt_vec;
+    {
+        int feature_index = -1;
+        for(auto &it_per_id: _feature_manager._feature){
+            it_per_id._used_num = it_per_id._feature_per_frame.size();
+            if (!(it_per_id._used_num >= 2 && it_per_id._start_frame < svar.GetInt("window_size") - 2))
+                continue;
+            ++feature_index;
+            int imu_i = it_per_id._start_frame, imu_j = imu_i - 1;
+            Eigen::Vector3d pts_i = it_per_id._feature_per_frame[0]._point;
+
+            std::shared_ptr<VertexInverseDepth> vertex_pt(new VertexInverseDepth());
+            VecX inv_d(1);
+            inv_d << _para_feature[feature_index][0];
+            vertex_pt->SetParameters(inv_d);
+            problem.AddVertex(vertex_pt);
+            vertex_pt_vec.emplace_back(vertex_pt);
+
+            for(auto &it_per_frame: it_per_id._feature_per_frame){
+                imu_j++;
+                if (imu_i == imu_j)
+                    continue;
+                Eigen::Vector3d pts_j = it_per_frame._point;
+                std::shared_ptr<EdgeReprojection> edge(new EdgeReprojection(pts_i, pts_j));
+                std::vector<std::shared_ptr<Vertex> > edge_vertex;
+                edge_vertex.emplace_back(vertex_pt);
+                edge_vertex.emplace_back(vertex_cam_vec[imu_i]);
+                edge_vertex.emplace_back(vertex_cam_vec[imu_j]);
+                edge_vertex.emplace_back(vertex_ext);
+
+                edge->SetVertex(edge_vertex);
+                edge->SetInformation(_project_sqrt_info.transpose() * _project_sqrt_info);
+                edge->SetLossFunction(loss_function);
+                problem.AddEdge(edge);
+            }
+        }
+    }
+
+    {
+        // 已经有Prior了
+        if(_H_prior.rows() > 0){
+            problem.SetHessianPrior(_H_prior);
+            problem.SetbPrior(_b_prior);
+            problem.SetErrPrior(_err_prior);
+            problem.SetJtPrior(_J_prior_inv);
+            problem.ExtendHessiansPriorSize(15);
+        }
     }
 }

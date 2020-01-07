@@ -22,7 +22,7 @@ int Vertex::Dimension() const
 
 int Vertex::LocalDimension() const
 {
-    return _local_dimension_local_dimension;
+    return _local_dimension;
 }
 
 void Vertex::Plus(const VecX &delta)
