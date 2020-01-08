@@ -60,10 +60,20 @@ public:
     // 返回雅克比
     std::vector<MatXX> Jacobians() const {return _jacobians;}
 
+    MatXX Information() const {
+        return _information;
+    }
+
+    MatXX SqrtInformation() const {
+        return _sqrt_information;
+    }
+
     void SetInformation(const MatXX &information){
         _information = information;
         _sqrt_information = Eigen::LLT<MatXX>(_information).matrixL().transpose();
     }
+
+    void RobustInfo(double &drho, MatXX &info) const;
 
     void SetLossFunction(LossFunction* loss){_lossfunction = loss;}
 

@@ -8,6 +8,8 @@
 #include <memory>
 #include <map>
 #include <unordered_map>
+#include <iostream>
+#include <algorithm>
 
 #include "Edge.h"
 #include "Vertex.h"
@@ -77,7 +79,25 @@ private:
     // set ordering for new vertex in slam problem
     void AddOrderingSLAM(std::shared_ptr<Vertex> v);
 
+    void MakeHessian();
+
+    void ComputeLambdaInitLM();
+
+    void SolveLinearSystem();
+
+    void UpdateStates();
+
+    // LM算法中用于判断lambda 在上次迭代中是否可以, 以及lambda怎么缩放.
+    bool IsGoodStepInLM();
+
+    void RollbackStates();
+
 private:
+    double _current_lambda;
+    double _current_chi;
+    double _stop_threshold_LM; // LM迭代退出阈值条件
+    double _ni; // 控制Lambda缩放大小
+
     ProblemType _problem_type;
 
     // all verticies
@@ -92,6 +112,11 @@ private:
     // verticies need to marg
     HashVertex _verticies_marg;
 
+    // 整个信息矩阵
+    MatXX _Hessian;
+    VecX _b;
+    VecX _delta_x;
+
     // 先验部分信息
     MatXX _H_prior;
     VecX _b_prior;
@@ -100,6 +125,15 @@ private:
 
     MatXX _Jt_prior_inv;
     VecX _err_prior;
+
+    // SBA的Pose部分
+    MatXX _Hpp_schur;
+    VecX _bpp_schur;
+    // Hessian的landmark和pose部分
+    MatXX _Hpp;
+    VecX _bpp;
+    MatXX _Hll;
+    VecX _bll;
 
     // ordering related
     unsigned long _ordering_poses = 0; // poses的大小
