@@ -173,6 +173,8 @@ public:
     void Double2Vector();
     bool FailureDetection();
     void SetParameter();
+    void ProblemSolve();
+    void MarginOldFrame();
 
 public:
     SolverFlag _solver_flag;

@@ -42,6 +42,7 @@ public:
     bool RemoveEdge(std::shared_ptr<Edge> edge);
 
     bool Solve(int iterations = 10);
+    bool Marginalize(const std::vector<std::shared_ptr<Vertex> > frame_vertex, int pose_dim);
 
     MatXX GetHessianPrior(){ return _H_prior;}
     VecX GetbPrior(){ return _b_prior;}

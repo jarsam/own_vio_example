@@ -387,7 +387,7 @@ bool Problem::Solve(int iterations)
         bool one_step_success = false;
         int false_cnt = 0;
 
-        while(!one_step_success && false_cnt) // 不断尝试Lambda, 直到成功迭代一步
+        while(!one_step_success && false_cnt < 10) // 不断尝试Lambda, 直到成功迭代一步
         {
             // 求解线性方程组
             SolveLinearSystem();
@@ -415,4 +415,28 @@ bool Problem::Solve(int iterations)
     }
 
     return true;
+}
+
+/*
+ * marg 所有和frame相连的edge: imu_factor, projection_factor
+ * 如果某个landmark和该frame相连, 但又不想加入marg, 就把该edge先去掉
+ */
+bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > frame_vertex, int pose_dim)
+{
+    SetOrdering();
+    // 找到要marg 的edge, frame_vertex[0] 是一个vertex, 它的edge包含_pre_integration
+    std::vector<std::shared_ptr<Edge> > marg_edges = GetConnectedEdges(frame_vertex[0]);
+    std::unordered_map<int, std::shared_ptr<Vertex> > marg_landmark;
+    int marg_landmark_size = 0;
+
+    for(int i = 0; i < marg_edges.size(); ++i){
+        auto verticies = marg_edges[i]->Verticies();
+        for(auto iter: verticies){
+            if(IsLandmarkVertex(iter) && marg_landmark.find(iter->Id()) == marg_landmark.end()){
+                iter->SetOrderingId(pose_dim + marg_landmark_size);
+                marg_landmark.insert(std::make_pair(iter->Id(), iter));
+                marg_landmark_size += iter->LocalDimension();
+            }
+        }
+    }
 }
