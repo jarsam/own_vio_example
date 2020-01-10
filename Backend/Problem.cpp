@@ -429,6 +429,7 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > frame_vert
     std::unordered_map<int, std::shared_ptr<Vertex> > marg_landmark;
     int marg_landmark_size = 0;
 
+    // 找到和要marg的vertex相连的vertex
     for(int i = 0; i < marg_edges.size(); ++i){
         auto verticies = marg_edges[i]->Verticies();
         for(auto iter: verticies){
@@ -439,4 +440,125 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > frame_vert
             }
         }
     }
+
+    int cols = pose_dim + marg_landmark_size;
+    MatXX H_marg(MatXX::Zero(cols, cols));
+    VecX b_marg(VecX::Zero(cols));
+    int ii = 0;
+    for(auto edge: marg_edges){
+        edge->ComputeResidual();
+        edge->ComputeJacobians();
+        auto jacobians = edge->Jacobians();
+        auto verticies = edge->Verticies();
+        ii++;
+
+        for(int i = 0; i < verticies.size(); ++i){
+            auto v_i = verticies[i];
+            auto jacobian_i = jacobians[i];
+            unsigned long index_i = v_i->OrderingId();
+            unsigned long dim_i = v_i->LocalDimension();
+            double drho;
+            MatXX robust_info(edge->Information().rows(), edge->Information().cols());
+            edge->RobustInfo(drho, robust_info);
+
+            for(size_t j = i; j < verticies.size(); ++j){
+                auto v_j = verticies[j];
+                auto jacobian_j = jacobians[j];
+                unsigned long index_j = v_j->OrderingId();
+                unsigned long dim_j = v_j->LocalDimension();
+                MatXX hessian = jacobian_i.transpose() * robust_info * jacobian_j;
+
+                H_marg.block(index_i, index_j, dim_i, dim_j) += hessian;
+                if (j != i)
+                    H_marg.block(index_j, index_i, dim_j, dim_i) += hessian.transpose();
+            }
+            b_marg.segment(index_i, dim_i) -= drho * jacobian_i.transpose() * edge->Information() * edge->Residual();
+        }
+    }
+
+    int reserve_size = pose_dim;
+    if (marg_landmark_size > 0){
+        int marg_size = marg_landmark_size;
+        MatXX Hmm = H_marg.block(reserve_size, reserve_size, marg_size, marg_size);
+        MatXX Hpm = H_marg.block(0, reserve_size, reserve_size, marg_size);
+        MatXX Hmp = H_marg.block(reserve_size, 0, marg_size, reserve_size);
+        VecX bpp = b_marg.segment(0, reserve_size);
+        VecX bmm = b_marg.segment(reserve_size, marg_size);
+
+        MatXX Hmm_inv(MatXX::Zero(marg_size, marg_size));
+        for(auto iter: marg_landmark){
+            int idx = iter.second->OrderingId() - reserve_size;
+            int size = iter.second->LocalDimension();
+            Hmm_inv.block(idx, idx, size, size) = Hmm.block(idx, idx, size, size).inverse();
+        }
+
+        MatXX temp_H = Hpm * Hmm_inv;
+        MatXX Hpp = H_marg.block(0, 0, reserve_size, reserve_size) - temp_H * Hmp;
+        bpp = bpp - temp_H * bmm;
+        // 将landmark的信息包含在了H_marg, b_marg中
+        H_marg = Hpp;
+        b_marg = bpp;
+    }
+
+    VecX b_prior_before = _b_prior;
+    if (_H_prior.rows() > 0){
+        H_marg += _H_prior;
+        b_marg += _b_prior;
+    }
+
+    int marg_dim = 0;
+    // index大的先移动
+    for(int i = frame_vertex.size() - 1; i >= 0; --i){
+        int idx = frame_vertex[i]->OrderingId();
+        int dim = frame_vertex[i]->LocalDimension();
+
+        marg_dim += dim;
+        // 将row i 移动到矩阵最下面
+        Eigen::MatrixXd temp_rows = H_marg.block(idx, 0, dim, reserve_size);
+        Eigen::MatrixXd temp_bottom_rows = H_marg.block(idx + dim, 0, reserve_size - idx - dim, reserve_size);
+        H_marg.block(idx, 0, reserve_size - idx - dim, reserve_size) = temp_bottom_rows;
+        H_marg.block(reserve_size - dim, 0, dim, reserve_size) = temp_rows;
+
+        // 将col i 移动到矩阵最右边
+        Eigen::MatrixXd temp_cols = H_marg.block(0, idx, reserve_size, dim);
+        Eigen::MatrixXd temp_right_cols = H_marg.block(0, idx + dim, reserve_size, reserve_size - idx - dim);
+        H_marg.block(0, idx, reserve_size, reserve_size - idx - dim) = temp_right_cols;
+        H_marg.block(0, reserve_size - dim, reserve_size, dim) = temp_cols;
+
+        Eigen::VectorXd temp_b = b_marg.segment(idx, dim);
+        Eigen::VectorXd temp_b_tail = b_marg.segment(idx + dim, reserve_size - idx - dim);
+        b_marg.segment(idx, reserve_size - idx - dim) = temp_b_tail;
+        b_marg.segment(reserve_size - dim, dim) = temp_b;
+    }
+
+    double eps = 1e-8;
+    int m2 = marg_dim;// marg_pose
+    int n2 = reserve_size - marg_dim;
+    Eigen::MatrixXd Amm = 0.5 * (H_marg.block(n2, n2, m2, m2) + H_marg.block(n2, n2, m2, m2).transpose());
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes(Amm);
+    Eigen::MatrixXd Amm_inv = saes.eigenvectors() *
+        Eigen::VectorXd((saes.eigenvalues().array() > eps).select(saes.eigenvalues().array().inverse(), 0))
+        .asDiagonal() * saes.eigenvectors().transpose();
+    Eigen::VectorXd bmm2 = b_marg.segment(n2, m2);
+    Eigen::MatrixXd Arm = H_marg.block(0, n2, n2, n2);
+    Eigen::MatrixXd Amr = H_marg.block(n2, 0, m2, n2);
+    Eigen::MatrixXd Arr = H_marg.block(0, 0, n2, n2);
+    Eigen::VectorXd brr = b_marg.segment(0, n2);
+    Eigen::MatrixXd temp_B = Arm * Amm_inv;
+    _H_prior = Arr - temp_B * Amr;
+    _b_prior = brr - temp_B * bmm2;
+
+    // 将_H_prior
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes2(_H_prior);
+    Eigen::VectorXd S = Eigen::VectorXd((saes2.eigenvalues().array() > eps).select(saes2.eigenvalues().array(), 0));
+    Eigen::VectorXd S_inv = Eigen::VectorXd(saes2.eigenvalues().array() > eps).select(saes2.eigenvalues().array().inverse(), 0);
+    Eigen::VectorXd S_sqrt = S.cwiseSqrt();
+    Eigen::VectorXd S_inv_sqrt = S_inv.cwiseSqrt();
+    _Jt_prior_inv = S_inv_sqrt.asDiagonal() * saes2.eigenvectors().transpose();
+    _err_prior = -_Jt_prior_inv * _b_prior;
+
+    MatXX J = S_sqrt.asDiagonal() * saes2.eigenvectors().transpose();
+    _H_prior = J.transpose() * J;
+    MatXX temp_h = MatXX((_H_prior.array().abs() > 1e-9).select(_H_prior.array(), 0));
+    _H_prior = temp_h;
 }
