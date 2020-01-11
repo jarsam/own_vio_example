@@ -204,7 +204,7 @@ void MarginalizationInfo::Marginalize()
     Eigen::VectorXd S_inv_sqrt = S_inv.cwiseSqrt();
     // FIXME: 下面这两个是干嘛的?
     // 这个是用FEJ的思想, 使用第一次得到的雅克比.
-    // Hx = b 分解乘 J^TJx = J^Tb 的形式, 运用了特征值分解的方法
+    // Hx = b 分解成 J^TJx = J^Tb 的形式, 运用了特征值分解的方法
     // _linearized_jacobians就是J, _linearized_residuals就是b了.
     _linearized_jacobians = S_sqrt.asDiagonal() * saes2.eigenvectors().transpose();
     _linearized_residuals = S_inv_sqrt.asDiagonal() * saes2.eigenvectors().transpose() * b;

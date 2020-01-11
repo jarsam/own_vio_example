@@ -175,6 +175,7 @@ public:
     void SetParameter();
     void ProblemSolve();
     void MarginOldFrame();
+    void MarginNewFrame();
 
 public:
     SolverFlag _solver_flag;

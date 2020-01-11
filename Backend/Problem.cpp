@@ -548,7 +548,7 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > frame_vert
     _H_prior = Arr - temp_B * Amr;
     _b_prior = brr - temp_B * bmm2;
 
-    // 将_H_prior
+    // 将Hx = b 分解成 J^TJx = J^Tb 的形式
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes2(_H_prior);
     Eigen::VectorXd S = Eigen::VectorXd((saes2.eigenvalues().array() > eps).select(saes2.eigenvalues().array(), 0));
     Eigen::VectorXd S_inv = Eigen::VectorXd(saes2.eigenvalues().array() > eps).select(saes2.eigenvalues().array().inverse(), 0);
@@ -561,4 +561,11 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > frame_vert
     _H_prior = J.transpose() * J;
     MatXX temp_h = MatXX((_H_prior.array().abs() > 1e-9).select(_H_prior.array(), 0));
     _H_prior = temp_h;
+
+    for(int i = 0; i < frame_vertex.size(); ++i)
+        RemoveVertex(frame_vertex[i]);
+    for(auto landmark_vertex: marg_landmark)
+        RemoveVertex(landmark_vertex.second);
+
+    return true;
 }

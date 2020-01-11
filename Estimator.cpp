@@ -1189,6 +1189,69 @@ void Estimator::MarginOldFrame()
     marg_vertex.emplace_back(vertex_cam_vec[0]);
     marg_vertex.emplace_back(vertex_speedbias_vec[0]);
     problem.Marginalize(marg_vertex, pose_dim);
+    _H_prior = problem.GetHessianPrior();
+    _b_prior = problem.GetbPrior();
+    _err_prior = problem.GetErrPrior();
+    _J_prior_inv = problem.GetJtPrior();
+}
+
+void Estimator::MarginNewFrame()
+{
+    Problem problem(Problem::SLAM_PROBLEM);
+    std::vector<std::shared_ptr<VertexPose> > vertex_cam_vec;
+    std::vector<std::shared_ptr<VertexSpeedBias> > vertex_speedbias_vec;
+    int pose_dim = 0;
+
+    // 先把外参数节点加入图优化, 这个节点在以后一直会被用到, 所以放在第一个.
+    std::shared_ptr<VertexPose> vertex_ext(new VertexPose());
+    {
+        Eigen::VectorXd pose(7);
+        pose << _para_ex_pose[0][0], _para_ex_pose[0][1], _para_ex_pose[0][2], _para_ex_pose[0][3],
+            _para_ex_pose[0][4], _para_ex_pose[0][5], _para_ex_pose[0][6];
+        vertex_ext->SetParameters(pose);
+        problem.AddVertex(vertex_ext);
+        pose_dim += vertex_ext->LocalDimension();
+    }
+
+    for(int i = 0; i < svar.GetInt("window_size") + 1; ++i){
+        std::shared_ptr<VertexPose> vertex_cam(new VertexPose());
+        Eigen::VectorXd pose(7);
+        pose << _para_pose[i][0], _para_pose[i][1], _para_pose[i][2], _para_pose[i][3],
+            _para_pose[i][4], _para_pose[i][5], _para_pose[i][6];
+        vertex_cam->SetParameters(pose);
+        vertex_cam_vec.emplace_back(vertex_cam);
+        problem.AddVertex(vertex_cam);
+        pose_dim += vertex_cam->LocalDimension();
+
+        std::shared_ptr<VertexSpeedBias> vertex_speedbias(new VertexSpeedBias());
+        Eigen::VectorXd speedbias(9);
+        speedbias << _para_speed_bias[i][0], _para_speed_bias[i][1], _para_speed_bias[i][2],
+            _para_speed_bias[i][3], _para_speed_bias[i][4], _para_speed_bias[i][5],
+            _para_speed_bias[i][6], _para_speed_bias[i][7], _para_speed_bias[i][8];
+        vertex_speedbias->SetParameters(speedbias);
+        vertex_speedbias_vec.emplace_back(vertex_speedbias);
+        problem.AddVertex(vertex_speedbias);
+        pose_dim += vertex_speedbias->LocalDimension();
+    }
+
+    {
+        if (_H_prior.rows() > 0){
+            problem.SetHessianPrior(_H_prior);
+            problem.SetbPrior(_b_prior);
+            problem.SetErrPrior(_err_prior);
+            problem.SetJtPrior(_J_prior_inv);
+            problem.ExtendHessiansPriorSize(15);
+        }
+    }
+
+    std::vector<std::shared_ptr<Vertex> > marg_vertex;
+    marg_vertex.emplace_back(vertex_cam_vec[svar.GetInt("window_size") - 1]);
+    marg_vertex.emplace_back(vertex_speedbias_vec[svar.GetInt("window_size") - 1]);
+    problem.Marginalize(marg_vertex, pose_dim);
+    _H_prior = problem.GetHessianPrior();
+    _b_prior = problem.GetbPrior();
+    _err_prior = problem.GetErrPrior();
+    _J_prior_inv = problem.GetJtPrior();
 }
 
 void Estimator::BackendOptimizationEigen()
@@ -1202,5 +1265,11 @@ void Estimator::BackendOptimizationEigen()
     if(_marginalization_flag == MARGIN_OLD){
         Vector2Double();
         MarginOldFrame();
+    }
+    else{
+        if(_H_prior.rows() > 0){
+            Vector2Double();
+            MarginNewFrame();
+        }
     }
 }
