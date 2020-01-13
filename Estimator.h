@@ -156,8 +156,6 @@ public:
         _feature_manager = FeatureManager(_Rs);
 
         _all_image_frame.clear();
-
-        _project_sqrt_info = (para._camera_intrinsics[0] + para._camera_intrinsics[1])/2/1.5 * Eigen::Matrix2d::Identity();
     }
 
     bool InitialStructure();

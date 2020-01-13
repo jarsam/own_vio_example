@@ -128,8 +128,8 @@ void Problem::SetOrdering()
 {
     // 每次都要重新计数
     _ordering_poses = 0;
-    _ordering_landmarks = 0;
     _ordering_generic = 0;
+    _ordering_landmarks = 0;
 
     for(auto vertex: _verticies){
         _ordering_generic += vertex.second->LocalDimension(); // 所有的优化变量总维度
@@ -190,7 +190,7 @@ void Problem::MakeHessian()
 
                 H.block(index_i, index_j, dim_i, dim_j).noalias() += hessian;
                 if (j != i)
-                    H.block(index_j, index_i, dim_j, dim_i).noalias() += hessian;
+                    H.block(index_j, index_i, dim_j, dim_i).noalias() += hessian.transpose();
             }
 
             b.segment(index_i, dim_i).noalias() -= drho * jacobian_i.transpose() * edge.second->Information() * edge.second->Residual();
@@ -200,14 +200,15 @@ void Problem::MakeHessian()
     _Hessian = H;
     _b = b;
 
+    // 只有当有先验值的时候, 才进入这一步
     if (_H_prior.rows() > 0){
         MatXX H_prior_tmp = _H_prior;
         VecX b_prior_tmp = _b_prior;
 
         // 遍历所有的POSE 顶点, 然后设置相应的先验维度为0, fix外参数
         // 同时我们要注意landmark 没有先验值
-        // FIXME: 感觉没有什么值能满足这个要求.. 难道之前的帧都是Fixed? 并且新加了一帧, 这个大小还一样吗?
         for(auto vertex: _verticies){
+            // 在所有的点中, 只有当不优化外参数的时候会符合下面这个条件
             if(IsPoseVertex(vertex.second) && vertex.second->IsFixed()){
                 int idx = vertex.second->OrderingId();
                 int dim = vertex.second->LocalDimension();
@@ -218,6 +219,7 @@ void Problem::MakeHessian()
             }
         }
 
+        // 将上面的Hessian矩阵与先验信息相加
         _Hessian.topLeftCorner(_ordering_poses, _ordering_poses) += H_prior_tmp;
         _b.head(_ordering_poses) += b_prior_tmp;
     }
@@ -235,7 +237,6 @@ void Problem::ComputeLambdaInitLM()
     for(auto edge: _edges)
         _current_chi += edge.second->RobustChi2();
 
-    // FIXME: 还是同一个问题, 大小一样吗?
     if (_err_prior.rows() > 0)
         _current_chi += _err_prior.squaredNorm();
 
@@ -540,7 +541,7 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > frame_vert
         Eigen::VectorXd((saes.eigenvalues().array() > eps).select(saes.eigenvalues().array().inverse(), 0))
         .asDiagonal() * saes.eigenvectors().transpose();
     Eigen::VectorXd bmm2 = b_marg.segment(n2, m2);
-    Eigen::MatrixXd Arm = H_marg.block(0, n2, n2, n2);
+    Eigen::MatrixXd Arm = H_marg.block(0, n2, n2, m2);
     Eigen::MatrixXd Amr = H_marg.block(n2, 0, m2, n2);
     Eigen::MatrixXd Arr = H_marg.block(0, 0, n2, n2);
     Eigen::VectorXd brr = b_marg.segment(0, n2);
@@ -551,7 +552,7 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > frame_vert
     // 将Hx = b 分解成 J^TJx = J^Tb 的形式
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes2(_H_prior);
     Eigen::VectorXd S = Eigen::VectorXd((saes2.eigenvalues().array() > eps).select(saes2.eigenvalues().array(), 0));
-    Eigen::VectorXd S_inv = Eigen::VectorXd(saes2.eigenvalues().array() > eps).select(saes2.eigenvalues().array().inverse(), 0);
+    Eigen::VectorXd S_inv = Eigen::VectorXd((saes2.eigenvalues().array() > eps).select(saes2.eigenvalues().array().inverse(), 0));
     Eigen::VectorXd S_sqrt = S.cwiseSqrt();
     Eigen::VectorXd S_inv_sqrt = S_inv.cwiseSqrt();
     _Jt_prior_inv = S_inv_sqrt.asDiagonal() * saes2.eigenvectors().transpose();

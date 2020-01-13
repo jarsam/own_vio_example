@@ -1060,7 +1060,7 @@ void Estimator::ProblemSolve()
         std::cout << "                    " << _err_prior.norm() << std::endl;
     }
 
-    for(int i = 0; i < svar.GetInt("window_size"); ++i){
+    for(int i = 0; i < svar.GetInt("window_size") + 1; ++i){
         VecX p = vertex_cam_vec[i]->Parameters();
         for(int j = 0; j < 7; ++j)
             _para_pose[i][j] = p[j];
@@ -1256,6 +1256,7 @@ void Estimator::MarginNewFrame()
 
 void Estimator::BackendOptimizationEigen()
 {
+    _project_sqrt_info = (para._camera_intrinsics[0] + para._camera_intrinsics[1])/2/1.5 * Eigen::Matrix2d::Identity();
     Vector2Double();
     // 构建求解器
     ProblemSolve();

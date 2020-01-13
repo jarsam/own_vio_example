@@ -29,7 +29,7 @@ public:
      */
     explicit Edge(int residual_dimension, int num_verticies,
                   const std::vector<std::string> &verticies_types = std::vector<std::string>());
-    virtual ~Edge();
+    virtual ~Edge(){};
 
     unsigned long Id() const {return _id;}
 

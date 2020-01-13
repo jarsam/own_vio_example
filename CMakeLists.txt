@@ -24,7 +24,7 @@ include_directories(.
         ${GLEW_INCLUDE_DIRS}
         ${GSLAM_INCLUDE_DIRS}
         ${OpenCV_INCLUDE_DIRS}
-        ${Sophus_INCLUDE_DIRS}
+        Sophus
 )
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
@@ -54,7 +54,6 @@ target_link_libraries(MyVio
         ${Boost_LIBRARIES}
         ${EIGEN3_LIBS}
         ${GSLAM_LIBS}
-        ${Sophus_LIBRARIES}
         )
 
 add_executable(vio_example main.cpp)

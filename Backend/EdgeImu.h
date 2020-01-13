@@ -85,18 +85,18 @@ public:
         }
         {
             Eigen::Matrix<double, 15, 9, Eigen::RowMajor> jacobian_speedbias_i;
-            jacobian_speed_bias_i.setZero();
+            jacobian_speedbias_i.setZero();
             // 之所以要减O_V是因为要放到jacobian_speed_bias_i[15, 9]对应的地方
-            jacobian_speed_bias_i.block<3, 3>(O_P, O_V - O_V) = -Qi.inverse().toRotationMatrix() * sum_dt;
-            jacobian_speed_bias_i.block<3, 3>(O_P, O_BA - O_V) = -dp_dba;
-            jacobian_speed_bias_i.block<3, 3>(O_P, O_BG - O_V) = -dp_dbg;
-            jacobian_speed_bias_i.block<3, 3>(O_R, O_BG - O_V) =
+            jacobian_speedbias_i.block<3, 3>(O_P, O_V - O_V) = -Qi.inverse().toRotationMatrix() * sum_dt;
+            jacobian_speedbias_i.block<3, 3>(O_P, O_BA - O_V) = -dp_dba;
+            jacobian_speedbias_i.block<3, 3>(O_P, O_BG - O_V) = -dp_dbg;
+            jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V) =
                 -Utility::Qleft(Qj.inverse() * Qi * _pre_integration->_delta_q).bottomRightCorner<3, 3>() * dq_dbg;
-            jacobian_speed_bias_i.block<3, 3>(O_V, O_V - O_V) = -Qi.inverse().toRotationMatrix();
-            jacobian_speed_bias_i.block<3, 3>(O_V, O_BA - O_V) = -dv_dba;
-            jacobian_speed_bias_i.block<3, 3>(O_V, O_BG - O_V) = -dv_dbg;
-            jacobian_speed_bias_i.block<3, 3>(O_BA, O_BA - O_V) = -Eigen::Matrix3d::Identity();
-            jacobian_speed_bias_i.block<3, 3>(O_BG, O_BG - O_V) = -Eigen::Matrix3d::Identity();
+            jacobian_speedbias_i.block<3, 3>(O_V, O_V - O_V) = -Qi.inverse().toRotationMatrix();
+            jacobian_speedbias_i.block<3, 3>(O_V, O_BA - O_V) = -dv_dba;
+            jacobian_speedbias_i.block<3, 3>(O_V, O_BG - O_V) = -dv_dbg;
+            jacobian_speedbias_i.block<3, 3>(O_BA, O_BA - O_V) = -Eigen::Matrix3d::Identity();
+            jacobian_speedbias_i.block<3, 3>(O_BG, O_BG - O_V) = -Eigen::Matrix3d::Identity();
             _jacobians[1] = jacobian_speedbias_i;
         }
         {
@@ -110,11 +110,11 @@ public:
         }
         {
             Eigen::Matrix<double, 15, 9, Eigen::RowMajor> jacobian_speedbias_j;
-            jacobian_speed_bias_j.setZero();
-            jacobian_speed_bias_j.block<3, 3>(O_V, O_V - O_V) = Qi.inverse().toRotationMatrix();
-            jacobian_speed_bias_j.block<3, 3>(O_BA,O_BA - O_V) = Eigen::Matrix3d::Identity();
-            jacobian_speed_bias_j.block<3, 3>(O_BG, O_BG - O_V) = Eigen::Matrix3d::Identity();
-            _jacobians_[3] = jacobian_speedbias_j;
+            jacobian_speedbias_j.setZero();
+            jacobian_speedbias_j.block<3, 3>(O_V, O_V - O_V) = Qi.inverse().toRotationMatrix();
+            jacobian_speedbias_j.block<3, 3>(O_BA,O_BA - O_V) = Eigen::Matrix3d::Identity();
+            jacobian_speedbias_j.block<3, 3>(O_BG, O_BG - O_V) = Eigen::Matrix3d::Identity();
+            _jacobians[3] = jacobian_speedbias_j;
         }
     }
 

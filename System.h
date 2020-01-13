@@ -69,9 +69,9 @@ public:
     void Draw();
 
 private:
+    void ReadParameters();
     void GetImageData(double stamp_sec, cv::Mat &img);
     void GetImuData(double stamp_sec, const Eigen::Vector3d &gyr, const Eigen::Vector3d &acc);
-    void ReadParameters();
     std::vector<std::pair<std::vector<ImuMessagePtr>, ImageMessagePtr>> GetMeasurements();
 
 private:
