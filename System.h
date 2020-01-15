@@ -13,6 +13,8 @@
 
 #include "FeatureTracker.h"
 #include "Estimator.h"
+#include "EstimatorFilter.h"
+#include "EstimatorOptimization.h"
 
 struct ImuMessage
 {
@@ -41,6 +43,10 @@ public:
     System(std::string data_path): _data_path(data_path), _start_backend(true), _pub_count(0), _imu_current_time(-1),
                                    _last_imu_time(0){
         ReadParameters();
+        if(svar.GetInt("optimization", 1))
+            _estimator = std::shared_ptr<EstimatorOptimization>(new EstimatorOptimization());
+        else
+            _estimator = std::shared_ptr<EstimatorFilter>(new EstimatorFilter());
         _tracker_data.resize(svar.GetInt("camera_number", 1));
         _delay_times = svar.GetDouble("delay_time", 2.0);
         _ofs_pose.open("./pose_output.txt", std::fstream::out);
@@ -59,7 +65,7 @@ public:
         _feature_buf_mutex.unlock();
 
         _estimator_mutex.lock();
-        _estimator.ClearState();
+        _estimator->ClearState();
         _ofs_pose.close();
     }
 
@@ -107,7 +113,7 @@ private:
 
     std::vector<FeatureTracker> _tracker_data;
 
-    Estimator _estimator;
+    std::shared_ptr<Estimator> _estimator;
 
     pangolin::OpenGlRenderState _cam_state;
     pangolin::View _cam;

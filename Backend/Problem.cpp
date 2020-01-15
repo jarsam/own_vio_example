@@ -101,6 +101,7 @@ std::vector<std::shared_ptr<Edge> > Problem::GetConnectedEdges(std::shared_ptr<V
     auto range = _vertexToEdge.equal_range(vertex->Id());
 
     for(auto iter = range.first; iter != range.second; ++iter){
+        // FIXME: 难道_vertexToEdge中的边都没被删除?
         // 这条边没被remove
         if (_edges.find(iter->second->Id()) == _edges.end())
             continue;
@@ -310,6 +311,8 @@ void Problem::UpdateStates()
     }
 
     // update prior
+    // 更新了先验信息, 只更新了_b_prior和_err_prior
+    // 没有更新_H_prior 和 _Jt_prior_inv
     if (_err_prior.rows() > 0){
         _b_prior_backup = _b_prior;
         _err_prior_backup = _err_prior;
@@ -317,6 +320,7 @@ void Problem::UpdateStates()
         // update with first order Taylor
         _b_prior -= _H_prior * _delta_x.head(_ordering_poses);
         // FIXME: 这个15是什么东西?
+        // 这个15就是上一帧的不包含的数据
         _err_prior = -_Jt_prior_inv * _b_prior.head(_ordering_poses - 15);
     }
 }
@@ -425,11 +429,14 @@ bool Problem::Solve(int iterations)
 bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > frame_vertex, int pose_dim)
 {
     SetOrdering();
+    // FIXME: 为什么是从第0个vertex开始的
+    // 因为第0个vertex是pose
     // 找到要marg 的edge, frame_vertex[0] 是一个vertex, 它的edge包含_pre_integration
     std::vector<std::shared_ptr<Edge> > marg_edges = GetConnectedEdges(frame_vertex[0]);
     std::unordered_map<int, std::shared_ptr<Vertex> > marg_landmark;
     int marg_landmark_size = 0;
 
+    // 在margin new frame 的时候不会找landmark
     // 找到和要marg的vertex相连的vertex
     for(int i = 0; i < marg_edges.size(); ++i){
         auto verticies = marg_edges[i]->Verticies();
@@ -442,6 +449,7 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > frame_vert
         }
     }
 
+    // 包含了vertex和landmark的大小
     int cols = pose_dim + marg_landmark_size;
     MatXX H_marg(MatXX::Zero(cols, cols));
     VecX b_marg(VecX::Zero(cols));
@@ -477,6 +485,8 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > frame_vert
         }
     }
 
+    // 将landmark的信息包含在了H_marg, b_marg中
+    // 这里仅仅只是marg了landmark的信息, 而要marg的vertex没有进行处理
     int reserve_size = pose_dim;
     if (marg_landmark_size > 0){
         int marg_size = marg_landmark_size;
@@ -496,11 +506,12 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > frame_vert
         MatXX temp_H = Hpm * Hmm_inv;
         MatXX Hpp = H_marg.block(0, 0, reserve_size, reserve_size) - temp_H * Hmp;
         bpp = bpp - temp_H * bmm;
-        // 将landmark的信息包含在了H_marg, b_marg中
         H_marg = Hpp;
         b_marg = bpp;
     }
 
+    // 对先验信息进行处理
+    // 如果_H_prior和_b_prior不扩展的话, H_marg, _H_prior和b_marg, _b_prior这两对大小都不相同
     VecX b_prior_before = _b_prior;
     if (_H_prior.rows() > 0){
         H_marg += _H_prior;
@@ -508,7 +519,8 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > frame_vert
     }
 
     int marg_dim = 0;
-    // index大的先移动
+    // 这里开始处理要marg 的vertex
+    // index 大的vertex 先移动到右下边
     for(int i = frame_vertex.size() - 1; i >= 0; --i){
         int idx = frame_vertex[i]->OrderingId();
         int dim = frame_vertex[i]->LocalDimension();
@@ -546,16 +558,34 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > frame_vert
     Eigen::MatrixXd Arr = H_marg.block(0, 0, n2, n2);
     Eigen::VectorXd brr = b_marg.segment(0, n2);
     Eigen::MatrixXd temp_B = Arm * Amm_inv;
+    // 这个时候就把要marg 的vertex给margin了.
     _H_prior = Arr - temp_B * Amr;
     _b_prior = brr - temp_B * bmm2;
 
-    // 将Hx = b 分解成 J^TJx = J^Tb 的形式
+    /*
+     * 边缘化的步骤可以总结为:
+     * 1. 舒尔补求解_H_prior, _b_prior
+     * 2. 分解_H_prior 获得J, J^T, (J^T)^+, 求解获得_err_prior = (J^T)^+ * _b_prior
+     * 3. 使用公式_H_prior * \deltaX = _b_prior求解 \deltaX
+     * 4. 使用\deltaX更新X, 计算当前状态X和X_0(也就是边缘化点的状态)的差值dx,
+     *    更新_err_prior = e_0(上一个_err_prior) + J * dx,
+     *    然后更新_b_prior = J^T * _err_prior
+     * 5. 使用公式_H_prior * \deltaX = _b_prior求解 \deltaX
+     *
+     * 这上面的步骤使用了FEJ方法, 而深蓝学院的课程中没有FEJ, VINS中使用了,
+     * 在_keep_block_data这个变量中保存了第一次的x
+     */
+
+    // 将Hx = b 分解成 J^TJx = J^Te 的形式
+    // e = (J^T)^+b, 其中(J^T)^+为伪逆, e为残差, J为残差对状态的雅克比矩阵
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes2(_H_prior);
     Eigen::VectorXd S = Eigen::VectorXd((saes2.eigenvalues().array() > eps).select(saes2.eigenvalues().array(), 0));
     Eigen::VectorXd S_inv = Eigen::VectorXd((saes2.eigenvalues().array() > eps).select(saes2.eigenvalues().array().inverse(), 0));
     Eigen::VectorXd S_sqrt = S.cwiseSqrt();
     Eigen::VectorXd S_inv_sqrt = S_inv.cwiseSqrt();
     _Jt_prior_inv = S_inv_sqrt.asDiagonal() * saes2.eigenvectors().transpose();
+    // FIXME: 感觉下面这个负号有问题啊, 应该没有啊.
+    // 其实也正号和负号也没啥影响, 反正后面都是用二范数.
     _err_prior = -_Jt_prior_inv * _b_prior;
 
     MatXX J = S_sqrt.asDiagonal() * saes2.eigenvectors().transpose();

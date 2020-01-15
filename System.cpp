@@ -266,11 +266,11 @@ std::vector<std::pair<std::vector<ImuMessagePtr>, ImageMessagePtr>> System::GetM
         if (_imu_buf.empty() || _feature_buf.empty()){
             return measurements;
         }
-        if (!(_imu_buf.back()->_header > _feature_buf.front()->_header + _estimator._td)){
+        if (!(_imu_buf.back()->_header > _feature_buf.front()->_header + _estimator->_td)){
 //            std::cerr << "wait for imu" << std::endl;
             return measurements;
         }
-        if (!(_imu_buf.front()->_header < _feature_buf.front()->_header + _estimator._td)){
+        if (!(_imu_buf.front()->_header < _feature_buf.front()->_header + _estimator->_td)){
             _feature_buf.pop();
             continue;
         }
@@ -281,7 +281,7 @@ std::vector<std::pair<std::vector<ImuMessagePtr>, ImageMessagePtr>> System::GetM
         std::vector<ImuMessagePtr> imu_msg;
         // 一帧图像特征点数据,对应多帧Imu数据,把它们进行对应,然后塞入measurements
         // 一帧图像特征点数据,与它和上一帧图像特征点数据之间的时间间隔内所有Imu数据,以及时间戳晚于当前帧图像的第一帧Imu数据.
-        while(_imu_buf.front()->_header < img_msg->_header + _estimator._td){
+        while(_imu_buf.front()->_header < img_msg->_header + _estimator->_td){
             imu_msg.emplace_back(_imu_buf.front());
             _imu_buf.pop();
         }
@@ -316,7 +316,7 @@ void System::ProcessBackEnd()
             double dx = 0, dy = 0, dz =0, rx = 0, ry = 0, rz = 0;
             for(auto &imu_msg: measurement.first){
                 double t = imu_msg->_header;
-                double img_t = imu_msg->_header + _estimator._td;
+                double img_t = imu_msg->_header + _estimator->_td;
                 if (t <= img_t){
                     if (_imu_current_time < 0)
                         _imu_current_time = t;
@@ -328,7 +328,7 @@ void System::ProcessBackEnd()
                     rx = imu_msg->_angular_velocity.x();
                     ry = imu_msg->_angular_velocity.y();
                     rz = imu_msg->_angular_velocity.z();
-                    _estimator.ProcessIMU(dt, Eigen::Vector3d(dx, dy, dz), Eigen::Vector3d(rx, ry, rz));
+                    _estimator->ProcessIMU(dt, Eigen::Vector3d(dx, dy, dz), Eigen::Vector3d(rx, ry, rz));
                 }
                 else{
                     double dt_1 = img_t - _imu_current_time;
@@ -344,7 +344,7 @@ void System::ProcessBackEnd()
                     ry = w1 * ry + w2 * imu_msg->_angular_velocity.y();
                     rz = w1 * rz + w2 * imu_msg->_angular_velocity.z();
                     // FIXME:感觉应该是dt_1+dt_2.
-                    _estimator.ProcessIMU(dt_1, Eigen::Vector3d(imu_msg->_linear_acceleration.x(), imu_msg->_linear_acceleration.y(), imu_msg->_linear_acceleration.z()),
+                    _estimator->ProcessIMU(dt_1, Eigen::Vector3d(imu_msg->_linear_acceleration.x(), imu_msg->_linear_acceleration.y(), imu_msg->_linear_acceleration.z()),
                         Eigen::Vector3d(imu_msg->_angular_velocity.x(), imu_msg->_angular_velocity.y(), imu_msg->_angular_velocity.z()));
                 }
 
@@ -369,14 +369,14 @@ void System::ProcessBackEnd()
                 image[feature_id].emplace_back(camera_id, xyz_uv_velocity);
             }
 
-            _estimator.ProcessImage(image, img_msg->_header);
-            if(_estimator._solver_flag == Estimator::SolverFlag::NON_LINEAR){
+            _estimator->ProcessImage(image, img_msg->_header);
+            if(_estimator->_solver_flag == Estimator::SolverFlag::NON_LINEAR){
                 Eigen::Vector3d p_wi;
                 Eigen::Quaterniond q_wi;
-                q_wi = Eigen::Quaterniond(_estimator._Rs[svar.GetInt("window_size")]);
-                p_wi = _estimator._Ps[svar.GetInt("window_size")];
+                q_wi = Eigen::Quaterniond(_estimator->_Rs[svar.GetInt("window_size")]);
+                p_wi = _estimator->_Ps[svar.GetInt("window_size")];
                 _draw_path.emplace_back(p_wi);
-                double stamp = _estimator._headers[svar.GetInt("window_size")];
+                double stamp = _estimator->_headers[svar.GetInt("window_size")];
                 _ofs_pose << std::fixed << stamp << " " << p_wi(0) << " " << p_wi(1) << " " << p_wi(2) << " "
                           << q_wi.w() << " " << q_wi.x() << " " << q_wi.y() << " " << q_wi.z() << std::endl;
             }
@@ -422,13 +422,13 @@ void System::Draw()
             glEnd();
 
             // points
-            if (_estimator._solver_flag == Estimator::SolverFlag::NON_LINEAR)
+            if (_estimator->_solver_flag == Estimator::SolverFlag::NON_LINEAR)
             {
                 glPointSize(5);
                 glBegin(GL_POINTS);
                 for(int i = 0; i < svar.GetInt("window_size") + 1; ++i)
                 {
-                    Eigen::Vector3d p_wi = _estimator._Ps[i];
+                    Eigen::Vector3d p_wi = _estimator->_Ps[i];
                     glColor3f(1, 0, 0);
                     glVertex3d(p_wi[0],p_wi[1],p_wi[2]);
                 }

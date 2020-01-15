@@ -35,6 +35,8 @@ add_library(MyVio
         PinholeCamera.cpp
         FeatureTracker.cpp
         Estimator.cpp
+        EstimatorFilter.cpp
+        EstimatorOptimization.cpp
         FeatureManager.cpp
         InitialAlignment.cpp
         InitialExRotation.cpp
