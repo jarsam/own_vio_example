@@ -22,7 +22,6 @@ public:
                        _jacobian(Eigen::Matrix<double, 15, 15>::Identity()), _covariance(Eigen::Matrix<double, 15, 15>::Zero()),
                        _sum_dt(0.0), _delta_p(Eigen::Vector3d::Zero()), _delta_q(Eigen::Quaterniond::Identity()),
                        _delta_v(Eigen::Vector3d::Zero())
-
     {
         // 如果噪声之间没有什么关系的话,初始化如下.
         _noise = Eigen::Matrix<double, 18, 18>::Zero();

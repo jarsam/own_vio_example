@@ -61,9 +61,9 @@ public:
         delete[] _para_tr[0];
         delete _para_tr;
     }
-    void ProcessIMU(double dt, const Eigen::Vector3d &linear_acceleration, const Eigen::Vector3d &angular_velocity);
-    void ProcessImage(const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double header);
-    void ClearState(){
+    virtual void ProcessIMU(double dt, const Eigen::Vector3d &linear_acceleration, const Eigen::Vector3d &angular_velocity);
+    virtual void ProcessImage(const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double header);
+    virtual void ClearState(){
         _failure_occur = false;
         _relocalization_info = false;
         _first_imu = false;
