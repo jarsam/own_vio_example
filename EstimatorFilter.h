@@ -7,6 +7,8 @@
 
 #include <Eigen/Dense>
 #include <GSLAM/core/GSLAM.h>
+#include <boost/shared_ptr.hpp>
+#include <boost/math/distributions/chi_squared.hpp>
 
 #include <map>
 #include <vector>
@@ -86,8 +88,8 @@ struct CamState
 struct StateServer
 {
     StateServer(){}
-    ImuState _imu_states;
-    CamState _cam_states;
+    ImuState _imu_state;
+    CamState _cam_state;
 
     Eigen::MatrixXd _state_cov;
     Eigen::Matrix<double, 12, 12> _continuous_noise_cov;
@@ -96,7 +98,9 @@ struct StateServer
 class EstimatorFilter: public Estimator
 {
 public:
-    EstimatorFilter(){}
+    EstimatorFilter(){
+        Initialize();
+    }
     ~EstimatorFilter(){}
 
     void LoadParameters();
@@ -106,8 +110,12 @@ public:
     virtual void ProcessImage(const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double header);
     virtual void ClearState();
 
+private:
+
 public:
     StateServer _state_server;
+
+    static std::map<int, double> _chi_squared_test_table;
 };
 
 

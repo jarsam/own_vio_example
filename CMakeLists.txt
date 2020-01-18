@@ -14,6 +14,7 @@ find_package(OpenCV REQUIRED)
 find_package(Boost REQUIRED COMPONENTS filesystem program_options system)
 find_package(GSLAM REQUIRED)
 find_package(Sophus REQUIRED)
+find_package(Boost REQUIRED)
 
 include_directories(.
         ${PROJECT_SOURCE_DIR}/Backend
@@ -24,6 +25,7 @@ include_directories(.
         ${GLEW_INCLUDE_DIRS}
         ${GSLAM_INCLUDE_DIRS}
         ${OpenCV_INCLUDE_DIRS}
+        ${Boost_INCLUDE_DIRS}
         Sophus
 )
 
@@ -55,6 +57,7 @@ target_link_libraries(MyVio
         ${Boost_LIBRARIES}
         ${EIGEN3_LIBS}
         ${GSLAM_LIBS}
+        ${Boost_LIBS}
         )
 
 add_executable(vio_example main.cpp)
